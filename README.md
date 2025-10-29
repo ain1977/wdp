@@ -58,3 +58,4 @@ Runtime config is read from environment variables (surfaced by `azd` and Key Vau
 - Optional Postgres if/when relational needs grow
 
 
+# Trigger deployment Wed Oct 29 16:31:42 CET 2025
