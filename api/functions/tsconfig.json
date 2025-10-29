@@ -8,9 +8,10 @@
     "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node", "@azure/functions"]
   },
-  "include": ["**/*.ts"],
+  "include": ["**/*.ts", "src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
 
