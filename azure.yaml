@@ -1,0 +1,17 @@
+name: wellness-practice-template
+metadata:
+  template: true
+infra:
+  provider: bicep
+  path: infra/main.bicep
+services:
+  web:
+    project: apps/web
+    host: staticwebapp
+    language: js
+  api:
+    project: api/functions
+    host: function
+    language: ts
+
+

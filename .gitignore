@@ -1,0 +1,12 @@
+node_modules
+.env*
+.azure/
+.next
+dist
+out
+coverage
+.DS_Store
+local.settings.json
+*.log
+
+

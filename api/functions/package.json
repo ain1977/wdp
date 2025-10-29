@@ -1,0 +1,19 @@
+{
+  "name": "wellness-functions",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "func start",
+    "dev": "func start --language-worker="
+  },
+  "dependencies": {
+    "@azure/communication-email": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "5.4.5",
+    "@types/node": "20.12.12"
+  }
+}
+
+
