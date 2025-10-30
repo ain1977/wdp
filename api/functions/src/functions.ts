@@ -77,99 +77,6 @@ export async function sendEmail(req: HttpRequest, context: InvocationContext): P
 }
 
 // Content Generator function
-export async function contentGenerator(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
-    try {
-        const body = (await req.json().catch(() => ({}))) as {
-            type: 'social_post' | 'newsletter' | 'email_sequence' | 'blog_post';
-            topic: string;
-            tone?: string;
-        };
-
-        const { type, topic, tone = 'professional' } = body;
-
-        if (!type || !topic) {
-            return { status: 400, jsonBody: { error: "Missing 'type' or 'topic'" } };
-        }
-
-        // Stub: Generate content based on type
-        const content = {
-            social_post: {
-                linkedin: `Professional insight: ${topic}`,
-                instagram: `✨ ${topic} ✨`,
-                twitter: `Quick tip: ${topic}`
-            },
-            newsletter: {
-                subject: `Weekly Update: ${topic}`,
-                content: `This week we're focusing on ${topic}. Here's what you need to know...`
-            },
-            email_sequence: {
-                welcome: `Welcome! Let's explore ${topic} together.`,
-                follow_up: `Following up on ${topic} - here's more information...`
-            },
-            blog_post: {
-                title: `Understanding ${topic}`,
-                content: `In this comprehensive guide, we'll explore ${topic} and its benefits...`
-            }
-        };
-
-        return {
-            status: 200,
-            jsonBody: {
-                type,
-                topic,
-                tone,
-                content: content[type]
-            }
-        };
-    } catch (error) {
-        context.error("ContentGenerator error", error);
-        return {
-            status: 500,
-            jsonBody: { error: "Internal error" }
-        };
-    }
-}
-
-// Substack Sync function
-export async function substackSync(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
-    try {
-        const body = (await req.json().catch(() => ({}))) as {
-            action: 'create_post' | 'update_post' | 'delete_post';
-            postContent?: {
-                title: string;
-                content: string;
-                tags?: string[];
-            };
-            postId?: string;
-        };
-
-        const { action, postContent, postId } = body;
-
-        if (!action) {
-            return { status: 400, jsonBody: { error: "Missing 'action'" } };
-        }
-
-        // Stub: Simulate Substack API calls
-        const result = {
-            action,
-            success: true,
-            message: `Successfully ${action}d post`,
-            postId: postId || 'new-post-id',
-            timestamp: new Date().toISOString()
-        };
-
-        return {
-            status: 200,
-            jsonBody: result
-        };
-    } catch (error) {
-        context.error("SubstackSync error", error);
-        return {
-            status: 500,
-            jsonBody: { error: "Internal error" }
-        };
-    }
-}
 
 // Register functions
 app.http('chatAsk', {
@@ -184,18 +91,4 @@ app.http('sendEmail', {
     route: 'email/send',
     authLevel: 'anonymous',
     handler: sendEmail
-});
-
-app.http('contentGenerator', {
-    methods: ['POST'],
-    route: 'content/generate',
-    authLevel: 'anonymous',
-    handler: contentGenerator
-});
-
-app.http('substackSync', {
-    methods: ['POST'],
-    route: 'substack/sync',
-    authLevel: 'anonymous',
-    handler: substackSync
 });
