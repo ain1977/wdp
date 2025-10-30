@@ -28,13 +28,7 @@ resource swa 'Microsoft.Web/staticSites@2022-09-01' = {
     tier: 'Free'
   }
   properties: {
-    repositoryToken: '' // CI will handle; left empty for azd deploy
-    repositoryUrl: githubRepoUrl
-    branch: githubBranch
-    buildProperties: {
-      appLocation: 'web'
-      outputLocation: 'out'
-    }
+    repositoryToken: '' // Will be configured manually for GitHub deployment
   }
   tags: {
     'azd-service-name': 'web'
@@ -119,11 +113,7 @@ param functionAppName string = 'func-${uniqueString(resourceGroup().id)}'
 @description('Function App hosting plan name')
 param hostingPlanName string = 'plan-${uniqueString(resourceGroup().id)}'
 
-@description('GitHub repository URL for deployment')
-param githubRepoUrl string = 'https://github.com/ain1977/wdp'
-
-@description('GitHub branch for deployment')
-param githubBranch string = 'main'
+// GitHub configuration removed - will be configured manually
 
 // Consumption plan for Functions (Dynamic Y1) - Linux
 resource functionPlan 'Microsoft.Web/serverfarms@2023-12-01' = {
@@ -169,6 +159,22 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'AzureWebJobsStorage'
           value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage}'
         }
+        {
+          name: 'WEBSITE_RUN_FROM_PACKAGE'
+          value: '1'
+        }
+        {
+          name: 'SCM_DO_BUILD_DURING_DEPLOYMENT'
+          value: 'true'
+        }
+        {
+          name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
+        }
+        {
+          name: 'WEBSITE_CONTENTSHARE'
+          value: 'func-xob7nugiarm7e'
+        }
       ]
     }
   }
@@ -177,8 +183,8 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
   }
 }
 
-// Note: GitHub Actions deployment is configured manually via Azure CLI
-// This allows for better control and avoids Bicep template issues
+// Note: GitHub Actions deployment configured manually via Azure CLI
+// This avoids Bicep template issues with GitHub integration
 
 @description('Outputs')
 output staticWebAppId string = swa.id
