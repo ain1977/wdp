@@ -1,9 +1,8 @@
 'use client'
+import { useState } from 'react'
 
 const bookingsUrl = process.env.NEXT_PUBLIC_BOOKINGS_URL
 const FUNCTIONS_BASE = 'https://func-xob7nugiarm7e.azurewebsites.net'
-
-import { useState } from 'react'
 
 export default function Home() {
   return (
