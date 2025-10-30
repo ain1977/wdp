@@ -182,20 +182,20 @@ app.http('chatAsk', {
 app.http('sendEmail', {
     methods: ['POST'],
     route: 'email/send',
-    authLevel: 'function',
+    authLevel: 'anonymous',
     handler: sendEmail
 });
 
 app.http('contentGenerator', {
     methods: ['POST'],
     route: 'content/generate',
-    authLevel: 'function',
+    authLevel: 'anonymous',
     handler: contentGenerator
 });
 
 app.http('substackSync', {
     methods: ['POST'],
     route: 'substack/sync',
-    authLevel: 'function',
+    authLevel: 'anonymous',
     handler: substackSync
 });
