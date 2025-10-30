@@ -5,6 +5,32 @@ const bookingsUrl = process.env.NEXT_PUBLIC_BOOKINGS_URL
 export default function Home() {
   return (
     <main style={{ maxWidth: 1200, margin: '0 auto', padding: 24 }}>
+      {/* Hero */}
+      <section style={{
+        position: 'relative',
+        height: 420,
+        borderRadius: 16,
+        overflow: 'hidden',
+        marginTop: 24,
+        marginBottom: 36,
+        background: '#111'
+      }}>
+        <div style={{
+          position: 'absolute', inset: 0,
+          backgroundImage: "url('https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?q=80&w=1600&auto=format&fit=crop')",
+          backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.55)'
+        }} />
+        <div style={{ position: 'relative', zIndex: 1, height: '100%', display: 'flex', alignItems: 'center' }}>
+          <div style={{ padding: 32, maxWidth: 680, color: 'white' }}>
+            <h1 style={{ fontSize: 44, lineHeight: 1.15, margin: 0 }}>Calm, elegant websites for wellness solo‑entrepreneurs</h1>
+            <p style={{ marginTop: 12, fontSize: 18, opacity: 0.9 }}>Bookings, AI assistant and email—fully managed so you can focus on your practice.</p>
+            <div style={{ marginTop: 18, display: 'flex', gap: 12 }}>
+              <a href="#services" style={{ padding: '10px 16px', background: '#667eea', color: 'white', textDecoration: 'none', borderRadius: 8, fontWeight: 600 }}>Explore Services</a>
+              <a href="/chat" style={{ padding: '10px 16px', background: 'rgba(255,255,255,0.12)', color: 'white', textDecoration: 'none', borderRadius: 8 }}>Try AI Assistant</a>
+            </div>
+          </div>
+        </div>
+      </section>
       <div style={{ textAlign: 'center', marginBottom: 48 }}>
         <h1 style={{ fontSize: 48, marginBottom: 16, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
           Your Complete Digital Wellness Platform
@@ -14,7 +40,7 @@ export default function Home() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 48 }}>
+      <div id="services" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 48 }}>
         <div style={{ padding: 24, border: '1px solid #e0e0e0', borderRadius: 12, background: '#fafafa' }}>
           <h3 style={{ fontSize: 20, marginBottom: 12, color: '#333' }}>📅 Smart Booking System</h3>
           <p style={{ color: '#666', marginBottom: 16 }}>Automated scheduling with Microsoft 365 integration, reminders, and follow-ups.</p>
