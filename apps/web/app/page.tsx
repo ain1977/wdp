@@ -6,17 +6,19 @@ const FUNCTIONS_BASE = 'https://func-xob7nugiarm7e.azurewebsites.net'
 
 export default function Home() {
   return (
-    <main style={{ maxWidth: 960, margin: '0 auto', padding: 24 }}>
+    <>
       {/* Hero */}
-      <section style={{ textAlign: 'center', marginTop: 24, marginBottom: 32 }}>
-        <div style={{ fontWeight: 700, letterSpacing: 2, textTransform: 'lowercase', color: '#111', marginBottom: 8 }}>lacura</div>
-        <h1 style={{ fontSize: 48, lineHeight: 1.15, margin: 0, color: '#111' }}>Your Journey Our Story</h1>
-        <p style={{ marginTop: 8, color: '#555' }}>Because caring for yourself starts at the table</p>
-        <div style={{ marginTop: 16 }}>
-          <a href="#contact" style={{ display: 'inline-block', padding: '12px 18px', background: '#111', color: 'white', textDecoration: 'none', borderRadius: 8 }}>Get Started</a>
+      <section id="top" style={{ position: 'relative', height: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        <img src="/chef-illustration.png" alt="lacura" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(44,62,80,0.4)' }} />
+        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', color: 'white', padding: 20 }}>
+          <p style={{ fontSize: 24, fontWeight: 700, textShadow: '2px 2px 8px rgba(0,0,0,0.6)', marginBottom: 20 }}>Because caring for yourself starts at the table</p>
+          <a href="#contact" style={{ display: 'inline-block', padding: '14px 24px', borderRadius: 999, background: '#2c3e50', color: 'white', textDecoration: 'none', boxShadow: '0 8px 20px rgba(44,62,80,0.4)', textTransform: 'uppercase', letterSpacing: 1 }}>Get Started</a>
         </div>
-        <div style={{ marginTop: 16, color: '#999' }}>↓</div>
+        <div style={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', color: 'white', fontSize: 28, opacity: 0.9 }}>↓</div>
       </section>
+
+      <main style={{ maxWidth: 960, margin: '0 auto', padding: 24 }}>
 
       {/* Our Story */}
       <section id="story" style={{ maxWidth: 760, margin: '0 auto 40px' }}>
@@ -66,8 +68,9 @@ export default function Home() {
         </form>
       </section>
 
-      <AssistantWidget />
-    </main>
+        <AssistantWidget />
+      </main>
+    </>
   )
 }
 
