@@ -2,11 +2,12 @@
   "name": "wellness-functions",
   "private": true,
   "version": "0.1.0",
+  "main": "dist/functions.js",
   "scripts": {
     "build": "tsc -p .",
     "start": "func start",
     "dev": "func start --language-worker=",
-    "postbuild": "cp -r dist/* . && cp -r src/* ."
+    "postbuild": ""
   },
   "dependencies": {
     "@azure/communication-email": "^1.0.0",
