@@ -4,43 +4,65 @@ const bookingsUrl = process.env.NEXT_PUBLIC_BOOKINGS_URL
 
 export default function Home() {
   return (
-    <main style={{ maxWidth: 1200, margin: '0 auto', padding: 24 }}>
+    <main style={{ maxWidth: 960, margin: '0 auto', padding: 24 }}>
       {/* Hero */}
-      <section style={{
-        position: 'relative',
-        height: 420,
-        borderRadius: 16,
-        overflow: 'hidden',
-        marginTop: 24,
-        marginBottom: 36,
-        background: '#111'
-      }}>
-        <div style={{
-          position: 'absolute', inset: 0,
-          backgroundImage: "url('https://images.unsplash.com/photo-1515378791036-0648a3ef77b2?q=80&w=1600&auto=format&fit=crop')",
-          backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.55)'
-        }} />
-        <div style={{ position: 'relative', zIndex: 1, height: '100%', display: 'flex', alignItems: 'center' }}>
-          <div style={{ padding: 32, maxWidth: 680, color: 'white' }}>
-            <h1 style={{ fontSize: 44, lineHeight: 1.15, margin: 0 }}>Calm, elegant websites for wellness solo‑entrepreneurs</h1>
-            <p style={{ marginTop: 12, fontSize: 18, opacity: 0.9 }}>Bookings, AI assistant and email—fully managed so you can focus on your practice.</p>
-            <div style={{ marginTop: 18, display: 'flex', gap: 12 }}>
-              <a href="#services" style={{ padding: '10px 16px', background: '#667eea', color: 'white', textDecoration: 'none', borderRadius: 8, fontWeight: 600 }}>Explore Services</a>
-              <a href="/chat" style={{ padding: '10px 16px', background: 'rgba(255,255,255,0.12)', color: 'white', textDecoration: 'none', borderRadius: 8 }}>Try AI Assistant</a>
+      <section style={{ textAlign: 'center', marginTop: 24, marginBottom: 32 }}>
+        <div style={{ fontWeight: 700, letterSpacing: 2, textTransform: 'lowercase', color: '#111', marginBottom: 8 }}>lacura</div>
+        <h1 style={{ fontSize: 48, lineHeight: 1.15, margin: 0, color: '#111' }}>Your Journey Our Story</h1>
+        <p style={{ marginTop: 8, color: '#555' }}>Because caring for yourself starts at the table</p>
+        <div style={{ marginTop: 16 }}>
+          <a href="#contact" style={{ display: 'inline-block', padding: '12px 18px', background: '#111', color: 'white', textDecoration: 'none', borderRadius: 8 }}>Get Started</a>
+        </div>
+        <div style={{ marginTop: 16, color: '#999' }}>↓</div>
+      </section>
+
+      {/* Our Story */}
+      <section id="story" style={{ maxWidth: 760, margin: '0 auto 40px' }}>
+        <h2 style={{ fontSize: 28, marginBottom: 12 }}>Our Story</h2>
+        <p style={{ color: '#444', lineHeight: 1.7 }}>
+          At La Cura, we believe care begins at the table.
+        </p>
+        <p style={{ color: '#444', lineHeight: 1.7 }}>
+          Food isn't just fuel, it's medicine, comfort, and connection. It can calm inflammation, restore balance, and bring joy back to your body and mind.
+        </p>
+        <p style={{ color: '#444', lineHeight: 1.7 }}>
+          Each dish is grounded in the wisdom of Italian home cooking and the science of anti-inflammatory foods, herbs, and spices—nature's quiet healers.
+        </p>
+      </section>
+
+      {/* Journey */}
+      <section id="journey" style={{ marginBottom: 40 }}>
+        <h2 style={{ fontSize: 28, marginBottom: 16 }}>Your Journey to Wellness</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+          {[
+            { n: '01', t: 'Discovery', d: 'We begin with a personal assessment to understand your goals, health needs, and taste preferences.' },
+            { n: '02', t: 'Sourcing with Care', d: 'We shop from local farms, organic markets, and our own garden of healing herbs.' },
+            { n: '03', t: 'Cooking in Your Kitchen', d: 'We prepare fresh, nourishing meals right in your home, crafted for three days of ease and balance.' },
+            { n: '04', t: 'Continuous Care', d: 'We listen, adjust, and evolve your menu as your needs and goals change.' }
+          ].map((s) => (
+            <div key={s.n} style={{ border: '1px solid #eee', borderRadius: 12, padding: 16, background: '#fafafa' }}>
+              <div style={{ fontSize: 14, color: '#999', marginBottom: 6 }}>{s.n}</div>
+              <h3 style={{ fontSize: 18, margin: '0 0 6px' }}>{s.t}</h3>
+              <p style={{ color: '#555', margin: 0 }}>{s.d}</p>
             </div>
-          </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 20 }}>
+          <a href="#contact" style={{ padding: '10px 16px', background: '#111', color: 'white', textDecoration: 'none', borderRadius: 8 }}>Feel Better Again</a>
         </div>
       </section>
-      <div style={{ textAlign: 'center', marginBottom: 48 }}>
-        <h1 style={{ fontSize: 48, marginBottom: 16, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-          Your Complete Digital Wellness Platform
-        </h1>
-        <p style={{ fontSize: 20, color: '#666', maxWidth: 600, margin: '0 auto' }}>
-          We handle all the tech so you can focus on what you do best - helping people heal and thrive.
-        </p>
-      </div>
 
-      <div id="services" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 48 }}>
+      {/* Contact */}
+      <section id="contact" style={{ marginTop: 40, marginBottom: 40 }}>
+        <h2 style={{ fontSize: 28, marginBottom: 12 }}>Get in Touch</h2>
+        <p style={{ color: '#555', marginBottom: 16 }}>Ready to start your journey to wellness? Send us a message and we'll get back to you soon.</p>
+        <form action="#" style={{ display: 'grid', gap: 12, maxWidth: 560 }} onSubmit={(e)=>e.preventDefault()}>
+          <input placeholder="Your name" style={{ padding: 12, borderRadius: 8, border: '1px solid #ddd' }} />
+          <input placeholder="Email" type="email" style={{ padding: 12, borderRadius: 8, border: '1px solid #ddd' }} />
+          <textarea placeholder="How can we help?" rows={4} style={{ padding: 12, borderRadius: 8, border: '1px solid #ddd' }} />
+          <button style={{ padding: '12px 16px', borderRadius: 8, background: '#111', color: 'white', border: 'none', cursor: 'pointer' }}>Send Message</button>
+        </form>
+      </section>
         <div style={{ padding: 24, border: '1px solid #e0e0e0', borderRadius: 12, background: '#fafafa' }}>
           <h3 style={{ fontSize: 20, marginBottom: 12, color: '#333' }}>📅 Smart Booking System</h3>
           <p style={{ color: '#666', marginBottom: 16 }}>Automated scheduling with Microsoft 365 integration, reminders, and follow-ups.</p>
