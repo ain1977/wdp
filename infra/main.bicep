@@ -1,5 +1,5 @@
 @description('Azure region')
-param location string = resourceGroup().location
+param location string = 'eastus'
 
 @description('Static Web App name')
 param swaName string = 'swa-${uniqueString(resourceGroup().id)}'
@@ -100,8 +100,7 @@ resource openAi 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
   }
 }
 
-// GPT-4 Deployment (using GPT-4o which is the latest model)
-// Note: SKU varies by region and model - Azure will use default if not specified
+// GPT-4 Deployment (using GPT-4o - East US region supports this model)
 resource gpt4Deployment 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = {
   parent: openAi
   name: 'gpt-4'
