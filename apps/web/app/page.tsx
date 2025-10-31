@@ -123,9 +123,23 @@ function AssistantWidget() {
   }
 
   function handleMenuClick(option: string) {
-    const menuText = option === 'booking' 
-      ? 'Schedule, cancel or move an appointment'
-      : 'Info about our practice'
+    let menuText = '';
+    switch(option) {
+      case 'schedule':
+        menuText = 'I want to schedule an appointment';
+        break;
+      case 'cancel':
+        menuText = 'I want to cancel an appointment';
+        break;
+      case 'move':
+        menuText = 'I want to move or reschedule an appointment';
+        break;
+      case 'info':
+        menuText = 'Info about our practice';
+        break;
+      default:
+        menuText = option;
+    }
     send(menuText)
   }
 
@@ -174,8 +188,36 @@ function AssistantWidget() {
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.background = '#e9ecef'}
                 onMouseLeave={(e) => e.currentTarget.style.background = '#f8f9fa'}
-                onClick={() => handleMenuClick('booking')}>
-                  📅 Schedule, cancel or move an appointment
+                onClick={() => handleMenuClick('schedule')}>
+                  📅 Schedule an appointment
+                </div>
+                <div style={{ 
+                  padding: '12px 16px', 
+                  background: '#f8f9fa', 
+                  borderRadius: 8, 
+                  marginBottom: 8,
+                  cursor: 'pointer',
+                  border: '1px solid #e5e5e5',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#e9ecef'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#f8f9fa'}
+                onClick={() => handleMenuClick('cancel')}>
+                  ❌ Cancel an appointment
+                </div>
+                <div style={{ 
+                  padding: '12px 16px', 
+                  background: '#f8f9fa', 
+                  borderRadius: 8, 
+                  marginBottom: 8,
+                  cursor: 'pointer',
+                  border: '1px solid #e5e5e5',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#e9ecef'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#f8f9fa'}
+                onClick={() => handleMenuClick('move')}>
+                  🔄 Move/reschedule an appointment
                 </div>
                 <div style={{ 
                   padding: '12px 16px', 

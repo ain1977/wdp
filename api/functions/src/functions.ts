@@ -163,16 +163,26 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
         const lastUser = [...(messages ?? [])].reverse().find(m => m.role === 'user');
         const userText = lastUser?.content?.slice(0, 1000) ?? '';
         
-        // Detect if this is a practice info query
+        // Detect if this is a practice info query (strict matching)
         const isPracticeInfoQuery = userText.toLowerCase().includes('info about our practice') || 
                                    userText.toLowerCase().includes('about our practice') ||
                                    userText.toLowerCase().includes('practice information') ||
-                                   userText.toLowerCase().includes('tell me about');
+                                   (userText.toLowerCase().includes('tell me about') && userText.toLowerCase().includes('practice'));
+        
+        // Detect booking-related queries
+        const isBookingQuery = userText.toLowerCase().includes('schedule') || 
+                              userText.toLowerCase().includes('book') ||
+                              userText.toLowerCase().includes('appointment') ||
+                              userText.toLowerCase().includes('cancel') ||
+                              userText.toLowerCase().includes('reschedule') ||
+                              userText.toLowerCase().includes('move') ||
+                              userText.toLowerCase().includes('availability');
 
         context.log(`[${requestId}] chatAsk: Processing user message`, {
             messageLength: userText.length,
             messageCount: messages?.length || 0,
             isPracticeInfoQuery,
+            isBookingQuery,
             menuSelection
         });
 
@@ -209,16 +219,44 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
         }
 
         // Build system prompt with context
-        // For practice info queries, enforce using ONLY the vector DB results
+        // For practice info queries, enforce STRICT guardrails - ONLY vector DB results
         let systemPrompt = `${AI_ASSISTANT_SYSTEM_PROMPT}\n\nTone: ${AI_ASSISTANT_TONE}`;
         
         if (isPracticeInfoQuery) {
+            // STRONG GUARDRAILS: Practice info MUST come ONLY from vector DB
             if (contextBlurb && !contextBlurb.includes('No specific information')) {
-                systemPrompt += `\n\nIMPORTANT: The user is asking about our practice. You MUST ONLY use the information provided below from our knowledge base. Do NOT use any general knowledge or training data about similar services. If the information below doesn't answer the question, say "I don't have that specific information in our knowledge base. Please contact us directly for more details."\n\n${contextBlurb}`;
+                systemPrompt += `\n\n🚨 CRITICAL RULE - STRICT ENFORCEMENT 🚨
+The user is asking about our practice. You MUST follow these rules STRICTLY:
+
+1. USE ONLY the information provided below from our knowledge base
+2. DO NOT use any general knowledge, training data, or assumptions about similar services
+3. DO NOT infer, extrapolate, or make up any information
+4. If the information below doesn't fully answer the question, you MUST say exactly: "I don't have that specific information in our knowledge base. Please contact us directly for more details."
+5. DO NOT combine knowledge base info with general knowledge
+6. DO NOT provide generic advice or common practices unless explicitly stated in the knowledge base
+
+Information from our knowledge base:
+${contextBlurb}
+
+Remember: If it's not in the knowledge base above, you MUST say you don't have that information.`;
             } else {
-                systemPrompt += `\n\nIMPORTANT: The user is asking about our practice, but no relevant information was found in our knowledge base. Respond by saying that you don't have that specific information available and suggest they contact us directly. Do NOT make up or assume any information about our practice.`;
+                systemPrompt += `\n\n🚨 CRITICAL RULE - STRICT ENFORCEMENT 🚨
+The user is asking about our practice, but NO relevant information was found in our knowledge base.
+
+You MUST respond with exactly this message (or similar, but conveying the same meaning):
+"I don't have that specific information available in our knowledge base. Please contact us directly for more details, and we'll be happy to help you."
+
+DO NOT:
+- Make up information
+- Use general knowledge about similar services
+- Provide generic advice
+- Assume or infer anything about our practice`;
             }
+        } else if (isBookingQuery) {
+            // For booking queries, be conversational and help find slots
+            systemPrompt += `\n\nYou are helping the user with scheduling, canceling, or rescheduling appointments. Be conversational and helpful. Ask clarifying questions if needed (like preferred dates/times, email address). You can help them find available slots and guide them through the booking process.${contextBlurb ? `\n\n${contextBlurb}` : ''}`;
         } else if (contextBlurb) {
+            // General queries can use both knowledge base and model knowledge
             systemPrompt += `\n\n${contextBlurb}`;
         }
         
