@@ -32,11 +32,21 @@ resource swa 'Microsoft.Web/staticSites@2022-09-01' = {
   }
   properties: {
     repositoryToken: '' // Will be configured manually for GitHub deployment
+    allowConfigFileUpdates: true
   }
   tags: {
     'azd-service-name': 'web'
   }
 }
+
+// Static Web App Auth Configuration
+// Note: Azure AD authentication must be configured in Azure Portal after deployment
+// Steps:
+// 1. Go to Static Web App -> Authentication -> Add identity provider
+// 2. Select Microsoft identity provider
+// 3. Create or select an App Registration
+// 4. Set the allowed email to: andrea@liveraltravel.com
+// 5. Configure role-based access control (RBAC) if needed
 
 // Application Insights - temporarily disabled due to provider registration issues
 // resource appi 'Microsoft.Insights/components@2020-02-02' = {
