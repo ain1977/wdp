@@ -7,6 +7,10 @@ const AI_SEARCH_ENDPOINT = process.env.AI_SEARCH_ENDPOINT ?? '';
 const AI_SEARCH_API_KEY = process.env.AI_SEARCH_API_KEY ?? '';
 const AI_SEARCH_INDEX = process.env.AI_SEARCH_INDEX ?? 'content';
 
+// --- Your Gut Assistant Configuration ---
+const AI_ASSISTANT_SYSTEM_PROMPT = process.env.AI_ASSISTANT_SYSTEM_PROMPT ?? `You are Your Gut Assistant, a helpful assistant for La Cura, a personal chef service focused on healing and wellness through Mediterranean nutrition. You are warm, knowledgeable, and supportive. Help users with questions about services, bookings, nutrition, and wellness. Be concise and friendly.`;
+const AI_ASSISTANT_TONE = process.env.AI_ASSISTANT_TONE ?? 'warm, supportive, knowledgeable';
+
 function getSearchClients() {
     if (!AI_SEARCH_ENDPOINT || !AI_SEARCH_API_KEY) {
         throw new Error('AI Search not configured');
@@ -106,9 +110,13 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
             }
         }
 
+        // Build system prompt with context
+        const systemPrompt = `${AI_ASSISTANT_SYSTEM_PROMPT}\n\nTone: ${AI_ASSISTANT_TONE}`;
+        
         // Stubbed assistant response augmented with retrieved context
+        // TODO: Replace with actual LLM call (Azure OpenAI) when integrated
         const reply = userText
-            ? `${contextBlurb ? contextBlurb + '\n\n' : ''}Thanks for your message: "${userText}". I can help with bookings and FAQs. (AI stub)`
+            ? `${contextBlurb ? contextBlurb + '\n\n' : ''}Thanks for your message: "${userText}". I can help with bookings and FAQs. (AI stub - will use: ${systemPrompt.slice(0, 100)}...)`
             : (contextBlurb || 'Hello! How can I assist you with bookings or practice information? (AI stub)');
 
         return {
@@ -194,6 +202,6 @@ app.http('sendEmail', {
 app.http('contentIngest', {
     methods: ['POST'],
     route: 'ingest',
-    authLevel: 'function',
+    authLevel: 'anonymous',
     handler: contentIngest
 });

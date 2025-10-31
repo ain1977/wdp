@@ -15,6 +15,73 @@ export default function Home() {
         </div>
         <div style={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', color: 'white', fontSize: 28, opacity: 0.9 }}>↓</div>
       </section>
+
+      {/* Pitch Section */}
+      <section style={{ 
+        background: 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%)',
+        padding: '80px 24px',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '60vh'
+      }}>
+        <div style={{ 
+          maxWidth: 900, 
+          textAlign: 'center',
+          color: '#2c3e50'
+        }}>
+          <p style={{ 
+            fontSize: 'clamp(20px, 4vw, 32px)', 
+            lineHeight: 1.6, 
+            fontWeight: 300,
+            marginBottom: 24,
+            color: '#555',
+            letterSpacing: '0.3px'
+          }}>
+            So many today struggle with <strong style={{ fontWeight: 600, color: '#2c3e50' }}>fatigue, bloating, brain fog</strong>.
+          </p>
+          <p style={{ 
+            fontSize: 'clamp(22px, 4.5vw, 36px)', 
+            lineHeight: 1.5, 
+            fontWeight: 400,
+            marginBottom: 32,
+            color: '#2c3e50',
+            letterSpacing: '-0.5px'
+          }}>
+            At <strong style={{ fontWeight: 700, color: '#1a252f' }}>La Cura</strong>, we help you rebuild from the inside out.
+          </p>
+          <div style={{
+            padding: '40px 32px',
+            background: 'white',
+            borderRadius: 16,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            marginBottom: 32,
+            border: '1px solid rgba(44,62,80,0.1)'
+          }}>
+            <p style={{ 
+              fontSize: 'clamp(18px, 3.5vw, 28px)', 
+              lineHeight: 1.7, 
+              fontWeight: 300,
+              color: '#444',
+              marginBottom: 20,
+              fontStyle: 'italic'
+            }}>
+              Using <span style={{ fontWeight: 500, color: '#2c3e50' }}>AI personalization</span>, <span style={{ fontWeight: 500, color: '#2c3e50' }}>Precision Nutrition</span> methods, and the healing rhythm of <span style={{ fontWeight: 500, color: '#2c3e50' }}>Mediterranean living</span>, we design a reset that's nourishing, not punishing.
+            </p>
+          </div>
+          <p style={{ 
+            fontSize: 'clamp(20px, 4vw, 30px)', 
+            lineHeight: 1.6, 
+            fontWeight: 400,
+            color: '#2c3e50',
+            fontStyle: 'italic',
+            letterSpacing: '0.2px'
+          }}>
+            Because when your gut feels right, <strong style={{ fontWeight: 600 }}>everything else flows</strong>.
+          </p>
+        </div>
+      </section>
+
       <AssistantWidget />
     </>
   )
@@ -66,7 +133,7 @@ function AssistantWidget() {
           marginBottom: 12
         }}>
           <div style={{ padding: 12, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ fontWeight: 600 }}>AI Assistant</div>
+            <div style={{ fontWeight: 600 }}>Your Gut Assistant</div>
             <button onClick={() => setOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
           </div>
           <div style={{ flex: 1, padding: 12, overflowY: 'auto' }}>

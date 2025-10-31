@@ -30,7 +30,7 @@ export default function Chat() {
 
   return (
     <main style={{ maxWidth: 800, margin: '0 auto', padding: 24 }}>
-      <h1 style={{ fontSize: 28, marginBottom: 12 }}>AI Assistant (stub)</h1>
+      <h1 style={{ fontSize: 28, marginBottom: 12 }}>Your Gut Assistant (stub)</h1>
       <div style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, minHeight: 280 }}>
         {messages.length === 0 && (
           <p style={{ color: '#777' }}>Ask about services or booking. This is a placeholder.</p>

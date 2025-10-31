@@ -2,6 +2,301 @@
 
 import { useState } from 'react'
 
+function AIAssistantConfig() {
+  const [config, setConfig] = useState({
+    systemPrompt: 'You are Your Gut Assistant, a helpful assistant for La Cura, a personal chef service focused on healing and wellness through Mediterranean nutrition. You are warm, knowledgeable, and supportive. Help users with questions about services, bookings, nutrition, and wellness. Be concise and friendly.',
+    tone: 'warm, supportive, knowledgeable'
+  })
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = () => {
+    // Note: This would typically save to environment variables or a config store
+    // For now, we'll show a message - in production, you'd call an API endpoint
+    setSaved(true)
+    setTimeout(() => setSaved(false), 3000)
+    console.log('Your Gut Assistant Config:', config)
+    alert('Note: This configuration needs to be set as environment variables in Azure Functions:\n\nAI_ASSISTANT_SYSTEM_PROMPT\nAI_ASSISTANT_TONE\n\nCurrent values logged to console.')
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#333' }}>
+          System Prompt (Personality & Instructions)
+        </label>
+        <textarea
+          value={config.systemPrompt}
+          onChange={e => setConfig({ ...config, systemPrompt: e.target.value })}
+          rows={6}
+          placeholder="Define Your Gut Assistant's role, personality, and behavior..."
+          style={{
+            width: '100%',
+            padding: 12,
+            border: '1px solid #ddd',
+            borderRadius: 8,
+            fontSize: 14,
+            fontFamily: 'inherit',
+            resize: 'vertical'
+          }}
+        />
+        <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+          This defines who the assistant is and how it should behave
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#333' }}>
+          Tone
+        </label>
+        <input
+          type="text"
+          value={config.tone}
+          onChange={e => setConfig({ ...config, tone: e.target.value })}
+          placeholder="e.g., warm, supportive, knowledgeable"
+          style={{
+            width: '100%',
+            padding: 12,
+            border: '1px solid #ddd',
+            borderRadius: 8,
+            fontSize: 14
+          }}
+        />
+        <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+          Describe the communication style (e.g., "warm, professional, concise")
+        </div>
+      </div>
+
+      {saved && (
+        <div style={{
+          padding: 12,
+          borderRadius: 8,
+          background: '#d4edda',
+          color: '#155724',
+          border: '1px solid #c3e6cb',
+          marginBottom: 16
+        }}>
+          Configuration saved (check console for values)
+        </div>
+      )}
+
+      <button
+        onClick={handleSave}
+        style={{
+          padding: '12px 24px',
+          background: '#2c3e50',
+          color: 'white',
+          border: 'none',
+          borderRadius: 8,
+          fontSize: 14,
+          fontWeight: 600,
+          cursor: 'pointer'
+        }}
+      >
+        Save Configuration
+      </button>
+
+      <div style={{ marginTop: 24, padding: 16, background: '#fff3cd', borderRadius: 8, fontSize: 13, color: '#856404' }}>
+        <strong>⚠️ Note:</strong> To apply these settings, you need to set them as environment variables in your Azure Functions app settings:
+        <ul style={{ marginTop: 8, marginBottom: 0, paddingLeft: 20 }}>
+          <li><code>AI_ASSISTANT_SYSTEM_PROMPT</code> = {config.systemPrompt.slice(0, 50)}...</li>
+          <li><code>AI_ASSISTANT_TONE</code> = {config.tone}</li>
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+function SearchUploadForm() {
+  const [formData, setFormData] = useState({
+    title: '',
+    content: '',
+    source: 'manual',
+    id: ''
+  })
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!formData.content.trim()) {
+      setResult({ success: false, message: 'Content is required' })
+      return
+    }
+
+    setLoading(true)
+    setResult(null)
+
+    try {
+      const payload = formData.id
+        ? {
+            documents: [{
+              id: formData.id,
+              title: formData.title || undefined,
+              content: formData.content,
+              source: formData.source || 'manual'
+            }]
+          }
+        : {
+            text: formData.content,
+            title: formData.title || undefined,
+            source: formData.source || 'manual'
+          }
+
+      const res = await fetch('/api/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setResult({ 
+          success: true, 
+          message: `Successfully uploaded ${data.upserted || 1} document(s) to Azure Search` 
+        })
+        setFormData({ title: '', content: '', source: 'manual', id: '' })
+      } else {
+        setResult({ success: false, message: data.error || 'Upload failed' })
+      }
+    } catch (error) {
+      setResult({ success: false, message: 'Network error. Please try again.' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 800 }}>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div>
+          <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#333' }}>
+            Title (optional)
+          </label>
+          <input
+            type="text"
+            value={formData.title}
+            onChange={e => setFormData({ ...formData, title: e.target.value })}
+            placeholder="e.g., Services Overview, FAQ, About Us"
+            style={{
+              width: '100%',
+              padding: 12,
+              border: '1px solid #ddd',
+              borderRadius: 8,
+              fontSize: 14
+            }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#333' }}>
+            Content *
+          </label>
+          <textarea
+            value={formData.content}
+            onChange={e => setFormData({ ...formData, content: e.target.value })}
+            placeholder="Enter the content you want to index in Azure Search. This will be searchable by Your Gut Assistant."
+            rows={12}
+            required
+            style={{
+              width: '100%',
+              padding: 12,
+              border: '1px solid #ddd',
+              borderRadius: 8,
+              fontSize: 14,
+              fontFamily: 'inherit',
+              resize: 'vertical'
+            }}
+          />
+          <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+            {formData.content.length} characters (max 8000)
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#333' }}>
+              Source (optional)
+            </label>
+            <input
+              type="text"
+              value={formData.source}
+              onChange={e => setFormData({ ...formData, source: e.target.value })}
+              placeholder="e.g., website, manual, faq"
+              style={{
+                width: '100%',
+                padding: 12,
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                fontSize: 14
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#333' }}>
+              Document ID (optional)
+            </label>
+            <input
+              type="text"
+              value={formData.id}
+              onChange={e => setFormData({ ...formData, id: e.target.value })}
+              placeholder="Leave empty for auto-generated"
+              style={{
+                width: '100%',
+                padding: 12,
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                fontSize: 14
+              }}
+            />
+          </div>
+        </div>
+
+        {result && (
+          <div style={{
+            padding: 12,
+            borderRadius: 8,
+            background: result.success ? '#d4edda' : '#f8d7da',
+            color: result.success ? '#155724' : '#721c24',
+            border: `1px solid ${result.success ? '#c3e6cb' : '#f5c6cb'}`
+          }}>
+            {result.message}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading || !formData.content.trim()}
+          style={{
+            padding: '14px 24px',
+            background: loading ? '#ccc' : '#2c3e50',
+            color: 'white',
+            border: 'none',
+            borderRadius: 8,
+            fontSize: 16,
+            fontWeight: 600,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            alignSelf: 'flex-start'
+          }}
+        >
+          {loading ? 'Uploading...' : 'Upload to Azure Search'}
+        </button>
+      </form>
+
+      <div style={{ marginTop: 32, padding: 20, background: '#f8f9fa', borderRadius: 8, fontSize: 14, color: '#666' }}>
+        <h3 style={{ margin: '0 0 12px 0', color: '#333' }}>💡 Tips</h3>
+        <ul style={{ margin: 0, paddingLeft: 20 }}>
+          <li>Content will be searchable by Your Gut Assistant on your website</li>
+          <li>Keep content focused and well-structured for better search results</li>
+          <li>You can upload multiple documents by submitting the form multiple times</li>
+          <li>Document IDs are auto-generated if not provided</li>
+        </ul>
+      </div>
+    </div>
+  )
+}
+
 export default function Admin() {
   const [activeTab, setActiveTab] = useState('overview')
   const [substackConfig, setSubstackConfig] = useState({
@@ -63,7 +358,7 @@ export default function Admin() {
       <h1 style={{ fontSize: 32, marginBottom: 24 }}>Practice Management Dashboard</h1>
       
       <div style={{ display: 'flex', gap: 16, marginBottom: 32, borderBottom: '1px solid #e0e0e0' }}>
-        {['overview', 'content', 'substack', 'analytics'].map(tab => (
+        {['overview', 'content', 'search', 'substack', 'analytics'].map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -106,6 +401,18 @@ export default function Admin() {
               <div style={{ fontSize: 32, fontWeight: 'bold', color: '#667eea' }}>1.2K</div>
               <div style={{ fontSize: 14, color: '#666' }}>This month</div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'search' && (
+        <div>
+          <h2 style={{ fontSize: 24, marginBottom: 24 }}>Azure Search Content Upload</h2>
+          <SearchUploadForm />
+          
+          <div style={{ marginTop: 48, padding: 24, border: '1px solid #e0e0e0', borderRadius: 8, background: '#f9f9f9' }}>
+            <h3 style={{ fontSize: 20, marginBottom: 16 }}>Your Gut Assistant Configuration</h3>
+            <AIAssistantConfig />
           </div>
         </div>
       )}

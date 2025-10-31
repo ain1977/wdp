@@ -208,6 +208,14 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'AI_SEARCH_INDEX'
           value: 'content'
         }
+        {
+          name: 'AI_ASSISTANT_SYSTEM_PROMPT'
+          value: 'You are Your Gut Assistant, a helpful assistant for La Cura, a personal chef service focused on healing and wellness through Mediterranean nutrition. You are warm, knowledgeable, and supportive. Help users with questions about services, bookings, nutrition, and wellness. Be concise and friendly.'
+        }
+        {
+          name: 'AI_ASSISTANT_TONE'
+          value: 'warm, supportive, knowledgeable'
+        }
       ]
     }
   }
