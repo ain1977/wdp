@@ -17,6 +17,10 @@
       "allowedRoles": ["anonymous"]
     },
     {
+      "route": "/",
+      "allowedRoles": ["authenticated"]
+    },
+    {
       "route": "/*",
       "allowedRoles": ["authenticated"]
     }
@@ -36,11 +40,11 @@
   "responseOverrides": {
     "401": {
       "statusCode": 302,
-      "redirect": "/.auth/login/aad"
+      "redirect": "/.auth/login/aad?post_login_redirect_uri=/"
     }
   },
   "navigationFallback": {
-    "rewrite": "/index.html",
+    "rewrite": "/",
     "exclude": [
       "/_next/static/*",
       "/_next/image/*",
@@ -48,6 +52,9 @@
       "/.auth/*",
       "*.{css,scss,js,png,gif,ico,jpg,jpeg,svg,woff,woff2,ttf,eot,json,webp}"
     ]
+  },
+  "mimeTypes": {
+    ".json": "application/json"
   }
 }
 
