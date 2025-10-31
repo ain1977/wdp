@@ -289,7 +289,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'ACS_SENDER'
-          value: 'DoNotReply@${acs.name}.azurecomm.net'
+          value: 'donotreply@6609e33d-b3d3-444f-9d8a-9f59c3bb43f4.azurecomm.net'
         }
       ]
     }
