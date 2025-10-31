@@ -1,18 +1,36 @@
 {
   "routes": [
     {
+      "route": "/.auth/*",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/_next/*",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/api/*",
+      "allowedRoles": ["anonymous"]
+    },
+    {
       "route": "/*",
       "allowedRoles": ["authenticated"]
     }
   ],
   "responseOverrides": {
     "401": {
-      "redirect": "/.auth/login/aad",
+      "redirect": "/.auth/login/aad?post_login_redirect_url=/",
       "statusCode": 302
     }
   },
   "navigationFallback": {
-    "rewrite": "index.html"
+    "rewrite": "/",
+    "exclude": [
+      "/_next/*",
+      "/api/*",
+      "/.auth/*",
+      "*.{css,scss,js,png,gif,ico,jpg,jpeg,svg,woff,woff2,ttf,eot,json}"
+    ]
   }
 }
 
