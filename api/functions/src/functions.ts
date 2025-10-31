@@ -281,23 +281,50 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
         const userText = lastUser?.content?.slice(0, 1000) ?? '';
 
         // Detect booking-related queries (scheduling, canceling, rescheduling)
-        const isScheduleQuery = userText.toLowerCase().includes('schedule') || 
-                               userText.toLowerCase().includes('book') ||
-                               userText.toLowerCase().includes('appointment') && !userText.toLowerCase().includes('cancel') && !userText.toLowerCase().includes('reschedule') ||
-                               userText.toLowerCase().includes('set up') ||
-                               userText.toLowerCase().includes('make an appointment');
+        // Be more lenient - check for appointment-related keywords or if this is early in conversation
+        const lowerText = userText.toLowerCase();
+        const messageCount = messages?.length || 0;
+        const isEarlyConversation = messageCount <= 3; // First few messages
         
-        const isCancelQuery = userText.toLowerCase().includes('cancel') ||
-                             userText.toLowerCase().includes('remove') ||
-                             userText.toLowerCase().includes('delete');
+        const isScheduleQuery = lowerText.includes('schedule') || 
+                               lowerText.includes('book') ||
+                               lowerText.includes('booking') ||
+                               (lowerText.includes('appointment') && !lowerText.includes('cancel') && !lowerText.includes('reschedule')) ||
+                               lowerText.includes('set up') ||
+                               lowerText.includes('make an appointment') ||
+                               lowerText.includes('need an appointment') ||
+                               lowerText.includes('want to see') ||
+                               lowerText.includes('get a time') ||
+                               lowerText.includes('available time') ||
+                               lowerText.includes('when are you available') ||
+                               (isEarlyConversation && (lowerText.includes('hi') || lowerText.includes('hello') || lowerText.includes('help')));
         
-        const isRescheduleQuery = userText.toLowerCase().includes('reschedule') ||
-                                 userText.toLowerCase().includes('move') ||
-                                 userText.toLowerCase().includes('change') ||
-                                 userText.toLowerCase().includes('different time') ||
-                                 userText.toLowerCase().includes('different date');
+        const isCancelQuery = lowerText.includes('cancel') ||
+                             lowerText.includes('remove') ||
+                             lowerText.includes('delete') ||
+                             lowerText.includes('can\'t make it') ||
+                             lowerText.includes('cannot make it');
+        
+        const isRescheduleQuery = lowerText.includes('reschedule') ||
+                                 lowerText.includes('move') ||
+                                 lowerText.includes('change') ||
+                                 lowerText.includes('different time') ||
+                                 lowerText.includes('different date') ||
+                                 lowerText.includes('another time') ||
+                                 lowerText.includes('another date');
         
         const isBookingQuery = isScheduleQuery || isCancelQuery || isRescheduleQuery;
+        
+        // If early in conversation and user hasn't explicitly asked about non-appointment topics, assume it's appointment-related
+        const isGeneralGreeting = isEarlyConversation && (
+            lowerText.includes('hi') || 
+            lowerText.includes('hello') || 
+            lowerText.includes('hey') ||
+            lowerText.trim().length < 10
+        );
+        
+        // If it's a general greeting or unclear query early in conversation, treat as appointment query
+        const shouldTreatAsBooking = isBookingQuery || (isEarlyConversation && !lowerText.includes('info') && !lowerText.includes('service') && !lowerText.includes('practice'));
         
         // Detect if user is providing booking details (email, time, date, confirm)
         const isBookingConfirmation = userText.toLowerCase().includes('@') || // email
@@ -313,11 +340,13 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
             isScheduleQuery,
             isCancelQuery,
             isRescheduleQuery,
-            isBookingQuery
+            isBookingQuery,
+            isEarlyConversation,
+            shouldTreatAsBooking: shouldTreatAsBooking
         });
         
-        // REJECT non-booking queries
-        if (!isBookingQuery && userText.trim().length > 0) {
+        // REJECT non-booking queries (but be lenient early in conversation)
+        if (!shouldTreatAsBooking && userText.trim().length > 0) {
             const reply = `I'm here to help you with appointments only. I can help you:
 - Schedule a new appointment
 - Cancel an existing appointment  
@@ -342,9 +371,21 @@ You CANNOT answer questions about services, practice information, nutrition, or 
 
 Tone: warm, supportive, professional, concise
 
+IMPORTANT: If the user sends a greeting (hi, hello) or an unclear message early in the conversation, assume they want to schedule an appointment and guide them through the scheduling workflow.
+
 `;
         
-        if (isScheduleQuery) {
+        // Determine which workflow to use
+        // If early conversation and unclear, default to scheduling
+        const workflowType = isScheduleQuery || (isEarlyConversation && !isCancelQuery && !isRescheduleQuery) 
+            ? 'schedule' 
+            : isCancelQuery 
+            ? 'cancel' 
+            : isRescheduleQuery 
+            ? 'reschedule' 
+            : 'schedule'; // default to schedule
+        
+        if (workflowType === 'schedule') {
             // DETAILED SCHEDULING WORKFLOW
             systemPrompt += `\n\n📅 SCHEDULING WORKFLOW - Follow these steps EXACTLY:
 
@@ -399,7 +440,7 @@ RULES:
 - If user provides email early, acknowledge but still follow the workflow
 - Keep each response concise (2-3 sentences max)`;
         
-        } else if (isCancelQuery) {
+        } else if (workflowType === 'cancel') {
             // DETAILED CANCELLING WORKFLOW
             systemPrompt += `\n\n❌ CANCELLING WORKFLOW - Follow these steps EXACTLY:
 
@@ -440,7 +481,7 @@ RULES:
 - Require explicit confirmation before canceling
 - Be empathetic but professional`;
         
-        } else if (isRescheduleQuery) {
+        } else if (workflowType === 'reschedule') {
             // DETAILED RESCHEDULING WORKFLOW
             systemPrompt += `\n\n🔄 RESCHEDULING WORKFLOW - Follow these steps EXACTLY:
 
@@ -536,7 +577,7 @@ RULES:
                 // For scheduling and rescheduling queries, check availability if user mentions dates/times
                 let availabilityContext = '';
                 
-                if ((isScheduleQuery || isRescheduleQuery) && !isBookingConfirmation) {
+                if ((workflowType === 'schedule' || workflowType === 'reschedule') && !isBookingConfirmation) {
                     // Parse date from user text
                     const dateInfo = parseDateFromText(userText);
                     
@@ -558,7 +599,7 @@ RULES:
                         startDate: startDate.toISOString(),
                         endDate: endDate.toISOString(),
                         userMentionedDate: dateInfo.hasDate,
-                        queryType: isScheduleQuery ? 'schedule' : 'reschedule'
+                        queryType: workflowType
                     });
                     
                     const availabilityResult = await checkAvailabilityInternal(
@@ -578,7 +619,7 @@ RULES:
                 }
                 
                 // For cancel queries, we may need to look up appointments
-                if (isCancelQuery) {
+                if (workflowType === 'cancel') {
                     // Check if user has provided email
                     const emailMatch = userText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
                     if (emailMatch) {
@@ -622,11 +663,11 @@ RULES:
             });
             
             // Provide helpful responses even without OpenAI
-            if (isScheduleQuery) {
+            if (workflowType === 'schedule') {
                 reply = `I'd be happy to help you schedule an appointment! Let me check the calendar for available slots. What date or time range works best for you?`;
-            } else if (isCancelQuery) {
+            } else if (workflowType === 'cancel') {
                 reply = `I can help you cancel your appointment. To find your appointment, I'll need your email address. What email address did you use when booking?`;
-            } else if (isRescheduleQuery) {
+            } else if (workflowType === 'reschedule') {
                 reply = `I can help you reschedule your appointment. First, I need to find your current appointment. What email address did you use when booking?`;
             } else {
                 reply = `I'm here to help you with appointments only. I can help you schedule, cancel, or reschedule an appointment. What would you like to do?`;
