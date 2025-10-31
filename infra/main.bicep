@@ -100,6 +100,25 @@ resource openAi 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
   }
 }
 
+// GPT-4 Deployment
+resource gpt4Deployment 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = {
+  parent: openAi
+  name: 'gpt-4'
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: 'gpt-4'
+      version: '0613'
+    }
+    raiPolicyName: 'Microsoft.Default'
+    versionUpgradeOption: 'OnceNewDefaultVersionAvailable'
+  }
+  sku: {
+    name: 'Standard'
+    capacity: 1
+  }
+}
+
 // Azure Communication Services
 resource acs 'Microsoft.Communication/communicationServices@2023-04-01' = {
   name: acsName
