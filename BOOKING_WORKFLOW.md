@@ -228,24 +228,47 @@ Assistant: "Wednesday at 2 PM is available. I've rescheduled your appointment. Y
 
 ## Microsoft Graph API Setup
 
-**Required Permissions:**
-- `Calendars.ReadWrite` - Read and write calendar events
-- `User.Read` - Read user profile
+### Step-by-Step: Add Calendar Permissions
 
-**Authentication Options:**
-1. **Managed Identity** (Recommended for Azure Functions)
-   - Function App gets identity automatically
-   - Assign permissions to Function App identity
+1. **Go to App Registration** in Azure Portal
+   - Navigate to: Azure Active Directory → App registrations
+   - Find your app: `e276d260-a10a-43a4-aefa-dccaaace3d23` (or search by name)
 
-2. **App Registration** (Alternative)
-   - Use existing App Registration (e276d260-a10a-43a4-aefa-dccaaace3d23)
-   - Add calendar permissions
-   - Use client credentials flow
+2. **Add Microsoft Graph API**
+   - Click **API permissions** in the left menu
+   - Click **Add a permission**
+   - Select **Microsoft Graph**
+   - Choose **Application permissions** (not Delegated)
 
-**Implementation:**
-- Use `@microsoft/microsoft-graph-client` npm package
-- Or use REST API directly with fetch
-- Handle authentication tokens automatically
+3. **Add Calendar Permissions**
+   - In the search box, type: `Calendar` (singular, not plural)
+   - Scroll through the results and look for:
+     - `Calendar.ReadWrite` (Application permission) - ✅ Select this one
+     - OR `Calendars.ReadWrite` - Some tenants show plural version
+   - If you don't see it, try searching: `Mailbox` or `Cal`
+   - Click **Add permissions** after selecting
+
+4. **Grant Admin Consent**
+   - Back on the API permissions page
+   - Click **Grant admin consent for [your tenant]**
+   - Confirm the consent
+
+5. **Assign Function App Identity**
+   - Go to your **Function App** in Azure Portal
+   - Navigate to **Identity** → **Azure role assignments**
+   - Or go to **Enterprise Applications** → Find your app → **Users and groups**
+   - Assign the Function App's Managed Identity the necessary permissions
+
+**Alternative:** If you prefer using the App Registration's client credentials:
+- Go to App Registration → **Certificates & secrets**
+- Create a new client secret
+- Use the client ID and secret in your Function App configuration
+
+**Required Permissions Summary:**
+- `Calendars.ReadWrite` (Application permission) - ✅ Required
+- `User.Read` (Delegated permission) - Optional, for reading user info
+
+**Note:** Application permissions require admin consent and are used by the Function App's Managed Identity.
 
 ## Questions to Answer
 

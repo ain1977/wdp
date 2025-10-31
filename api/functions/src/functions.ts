@@ -3,7 +3,7 @@ import { EmailClient } from "@azure/communication-email";
 import { SearchClient, SearchIndexClient, AzureKeyCredential, odata } from "@azure/search-documents";
 import { DefaultAzureCredential } from "@azure/identity";
 import { Client } from "@microsoft/microsoft-graph-client";
-import { AzureIdentityAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials";
+import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials";
 
 // --- Azure AI Search helpers ---
 const AI_SEARCH_ENDPOINT = process.env.AI_SEARCH_ENDPOINT ?? '';
@@ -19,7 +19,7 @@ const CALENDAR_OWNER_EMAIL = process.env.CALENDAR_OWNER_EMAIL ?? 'andrea@liveral
 
 function getGraphClient(): Client {
     const credential = new DefaultAzureCredential();
-    const authProvider = new AzureIdentityAuthenticationProvider(credential, {
+    const authProvider = new TokenCredentialAuthenticationProvider(credential, {
         scopes: ['https://graph.microsoft.com/.default']
     });
     return Client.initWithMiddleware({ authProvider });
