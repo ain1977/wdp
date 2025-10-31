@@ -1,3 +1,4 @@
+// Function App entry point
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from "@azure/functions";
 import { EmailClient } from "@azure/communication-email";
 import { SearchClient, SearchIndexClient, AzureKeyCredential, odata } from "@azure/search-documents";
