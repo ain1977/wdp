@@ -281,7 +281,7 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         }
         {
           name: 'OPENAI_DEPLOYMENT_NAME'
-          value: 'gpt-4'
+          value: 'gpt-4o-mini'
         }
       ]
     }
