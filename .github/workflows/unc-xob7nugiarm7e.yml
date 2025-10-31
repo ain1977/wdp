@@ -35,6 +35,14 @@ jobs:
           ls -la node_modules/@azure/functions || echo "ERROR: @azure/functions not found!"
           ls -la node_modules/openai || echo "ERROR: openai not found!"
 
+      - name: Create deployment package
+        working-directory: api/functions
+        run: |
+          echo "Creating deployment package with node_modules..."
+          # Ensure node_modules is included
+          ls -la node_modules/@azure/functions || echo "WARNING: @azure/functions missing"
+          ls -la node_modules/openai || echo "WARNING: openai missing"
+
       - name: Deploy to Azure Functions
         uses: Azure/functions-action@v1
         with:
@@ -43,3 +51,4 @@ jobs:
           publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
           scm-do-build-during-deployment: false
           enable-oryx-build: false
+          respect-funcignore: false
