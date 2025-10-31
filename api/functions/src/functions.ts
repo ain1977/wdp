@@ -4,11 +4,17 @@ import { SearchClient, SearchIndexClient, AzureKeyCredential, odata } from "@azu
 import { DefaultAzureCredential } from "@azure/identity";
 import { Client } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials";
+import OpenAI from "openai";
 
 // --- Azure AI Search helpers ---
 const AI_SEARCH_ENDPOINT = process.env.AI_SEARCH_ENDPOINT ?? '';
 const AI_SEARCH_API_KEY = process.env.AI_SEARCH_API_KEY ?? '';
 const AI_SEARCH_INDEX = process.env.AI_SEARCH_INDEX ?? 'content';
+
+// --- Azure OpenAI Configuration ---
+const OPENAI_ENDPOINT = process.env.OPENAI_ENDPOINT ?? '';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? '';
+const OPENAI_DEPLOYMENT_NAME = process.env.OPENAI_DEPLOYMENT_NAME ?? 'gpt-4';
 
 // --- Your Gut Assistant Configuration ---
 const AI_ASSISTANT_SYSTEM_PROMPT = process.env.AI_ASSISTANT_SYSTEM_PROMPT ?? `You are Your Gut Assistant, a helpful assistant for La Cura, a personal chef service focused on healing and wellness through Mediterranean nutrition. You are warm, knowledgeable, and supportive. Help users with questions about services, bookings, nutrition, and wellness. Be concise and friendly.`;
@@ -16,6 +22,18 @@ const AI_ASSISTANT_TONE = process.env.AI_ASSISTANT_TONE ?? 'warm, supportive, kn
 
 // --- Microsoft Graph API helpers ---
 const CALENDAR_OWNER_EMAIL = process.env.CALENDAR_OWNER_EMAIL ?? 'andrea@liveraltravel.com';
+
+function getOpenAIClient(): OpenAI | null {
+    if (!OPENAI_ENDPOINT || !OPENAI_API_KEY) {
+        return null;
+    }
+    return new OpenAI({
+        apiKey: OPENAI_API_KEY,
+        baseURL: `${OPENAI_ENDPOINT}/openai/deployments/${OPENAI_DEPLOYMENT_NAME}`,
+        defaultQuery: { 'api-version': '2024-02-15-preview' },
+        defaultHeaders: { 'api-key': OPENAI_API_KEY }
+    });
+}
 
 function getGraphClient(context?: InvocationContext): Client {
     try {
@@ -121,15 +139,30 @@ export async function contentIngest(req: HttpRequest, context: InvocationContext
 
 // Chat Ask function
 export async function chatAsk(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+    const requestId = context.invocationId;
+    const startTime = Date.now();
+    
     try {
-        const { messages } = (await req.json().catch(() => ({ messages: [] }))) as { messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }> };
+        context.log(`[${requestId}] chatAsk: Starting chat request`);
+        
+        const { messages } = (await req.json().catch((parseError) => {
+            context.error(`[${requestId}] chatAsk: Failed to parse request body`, parseError);
+            throw parseError;
+        })) as { messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }> };
+        
         const lastUser = [...(messages ?? [])].reverse().find(m => m.role === 'user');
         const userText = lastUser?.content?.slice(0, 1000) ?? '';
+
+        context.log(`[${requestId}] chatAsk: Processing user message`, {
+            messageLength: userText.length,
+            messageCount: messages?.length || 0
+        });
 
         // If AI Search configured, retrieve relevant content (text/BM25 for now)
         let contextBlurb = '';
         if (AI_SEARCH_ENDPOINT && AI_SEARCH_API_KEY) {
             try {
+                context.log(`[${requestId}] chatAsk: Searching Azure AI Search`);
                 await ensureIndexExists(context);
                 const { searchClient } = getSearchClients();
                 const results = await searchClient.search(userText || '*', { top: 5, queryType: 'simple', includeTotalCount: false });
@@ -140,20 +173,66 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
                 }
                 if (snippets.length) {
                     contextBlurb = `Relevant info:\n${snippets.join('\n')}`;
+                    context.log(`[${requestId}] chatAsk: Found ${snippets.length} relevant search results`);
                 }
             } catch (e) {
-                context.warn?.('AI Search query failed');
+                context.warn(`[${requestId}] chatAsk: AI Search query failed`, e);
             }
         }
 
         // Build system prompt with context
-        const systemPrompt = `${AI_ASSISTANT_SYSTEM_PROMPT}\n\nTone: ${AI_ASSISTANT_TONE}`;
+        const systemPrompt = `${AI_ASSISTANT_SYSTEM_PROMPT}\n\nTone: ${AI_ASSISTANT_TONE}${contextBlurb ? `\n\n${contextBlurb}` : ''}`;
         
-        // Stubbed assistant response augmented with retrieved context
-        // TODO: Replace with actual LLM call (Azure OpenAI) when integrated
-        const reply = userText
-            ? `${contextBlurb ? contextBlurb + '\n\n' : ''}Thanks for your message: "${userText}". I can help with bookings and FAQs. (AI stub - will use: ${systemPrompt.slice(0, 100)}...)`
-            : (contextBlurb || 'Hello! How can I assist you with bookings or practice information? (AI stub)');
+        // Prepare messages for OpenAI
+        const openAIMessages: Array<{ role: 'system' | 'user' | 'assistant', content: string }> = [
+            { role: 'system', content: systemPrompt },
+            ...(messages?.filter(m => m.role !== 'system') || [])
+        ];
+
+        // Try to use Azure OpenAI if configured
+        const openAIClient = getOpenAIClient();
+        let reply: string;
+        
+        if (openAIClient) {
+            try {
+                context.log(`[${requestId}] chatAsk: Calling Azure OpenAI`, {
+                    deployment: OPENAI_DEPLOYMENT_NAME,
+                    messageCount: openAIMessages.length
+                });
+                
+                const response = await openAIClient.chat.completions.create({
+                    model: OPENAI_DEPLOYMENT_NAME,
+                    messages: openAIMessages,
+                    temperature: 0.7,
+                    max_tokens: 500
+                });
+                
+                reply = response.choices[0]?.message?.content || 'I apologize, but I couldn\'t generate a response.';
+                
+                const duration = Date.now() - startTime;
+                context.log(`[${requestId}] chatAsk: Successfully generated response`, {
+                    responseLength: reply.length,
+                    durationMs: duration,
+                    tokensUsed: response.usage?.total_tokens
+                });
+            } catch (openAIError: any) {
+                context.error(`[${requestId}] chatAsk: Azure OpenAI error`, {
+                    errorMessage: openAIError?.message,
+                    errorCode: openAIError?.code,
+                    errorStack: openAIError?.stack
+                });
+                // Fallback to stub if OpenAI fails
+                reply = userText
+                    ? `${contextBlurb ? contextBlurb + '\n\n' : ''}I apologize, but I'm having trouble processing your request right now. Please try again or contact us directly.`
+                    : 'Hello! How can I assist you with bookings or practice information?';
+            }
+        } else {
+            // Fallback to stub if OpenAI not configured
+            context.warn(`[${requestId}] chatAsk: Azure OpenAI not configured, using fallback response`);
+            reply = userText
+                ? `${contextBlurb ? contextBlurb + '\n\n' : ''}Thanks for your message: "${userText}". I can help with bookings and FAQs. (AI assistant is being configured - please check OpenAI settings)`
+                : (contextBlurb || 'Hello! How can I assist you with bookings or practice information?');
+        }
 
         return {
             status: 200,
@@ -161,11 +240,20 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
                 message: { role: 'assistant', content: reply }
             }
         };
-    } catch (error) {
-        context.error("ChatAsk error", error);
+    } catch (error: any) {
+        const duration = Date.now() - startTime;
+        context.error(`[${requestId}] chatAsk: Error processing chat request`, {
+            errorMessage: error?.message,
+            errorStack: error?.stack,
+            durationMs: duration
+        });
         return {
             status: 500,
-            jsonBody: { error: "Internal error" }
+            jsonBody: { 
+                error: "Internal error",
+                requestId,
+                details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+            }
         };
     }
 }

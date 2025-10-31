@@ -247,6 +247,18 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
           value: appi.properties.ConnectionString
         }
+        {
+          name: 'OPENAI_ENDPOINT'
+          value: 'https://${openAi.name}.openai.azure.com'
+        }
+        {
+          name: 'OPENAI_API_KEY'
+          value: openAi.listKeys().key1
+        }
+        {
+          name: 'OPENAI_DEPLOYMENT_NAME'
+          value: 'gpt-4'
+        }
       ]
     }
   }

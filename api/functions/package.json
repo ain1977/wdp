@@ -12,14 +12,14 @@
   "dependencies": {
     "@azure/communication-email": "^1.0.0",
     "@azure/functions": "^4.5.0",
-    "@azure/search-documents": "^12.1.0",
     "@azure/identity": "^4.0.1",
-    "@microsoft/microsoft-graph-client": "^3.0.7"
+    "@azure/openai": "^2.0.0",
+    "@azure/search-documents": "^12.1.0",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "openai": "^6.7.0"
   },
   "devDependencies": {
-    "typescript": "5.4.5",
-    "@types/node": "20.12.12"
+    "@types/node": "20.12.12",
+    "typescript": "5.4.5"
   }
 }
-
-
