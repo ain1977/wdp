@@ -270,6 +270,15 @@ DO NOT:
         const openAIClient = getOpenAIClient();
         let reply: string;
         
+        // Log OpenAI configuration status
+        context.log(`[${requestId}] chatAsk: OpenAI configuration check`, {
+            hasEndpoint: !!OPENAI_ENDPOINT,
+            hasApiKey: !!OPENAI_API_KEY,
+            endpointPrefix: OPENAI_ENDPOINT ? OPENAI_ENDPOINT.substring(0, 20) + '...' : 'missing',
+            deploymentName: OPENAI_DEPLOYMENT_NAME,
+            clientAvailable: !!openAIClient
+        });
+        
         if (openAIClient) {
             try {
                 context.log(`[${requestId}] chatAsk: Calling Azure OpenAI`, {
@@ -304,11 +313,32 @@ DO NOT:
                     : 'Hello! How can I assist you with bookings or practice information?';
             }
         } else {
-            // Fallback to stub if OpenAI not configured
-            context.warn(`[${requestId}] chatAsk: Azure OpenAI not configured, using fallback response`);
-            reply = userText
-                ? `${contextBlurb ? contextBlurb + '\n\n' : ''}Thanks for your message: "${userText}". I can help with bookings and FAQs. (AI assistant is being configured - please check OpenAI settings)`
-                : (contextBlurb || 'Hello! How can I assist you with bookings or practice information?');
+            // Fallback if OpenAI not configured
+            context.warn(`[${requestId}] chatAsk: Azure OpenAI not configured`, {
+                missingEndpoint: !OPENAI_ENDPOINT,
+                missingApiKey: !OPENAI_API_KEY
+            });
+            
+            // Provide helpful responses even without OpenAI
+            if (isBookingQuery) {
+                reply = `I'd be happy to help you ${userText.toLowerCase().includes('schedule') || userText.toLowerCase().includes('book') ? 'schedule' : userText.toLowerCase().includes('cancel') ? 'cancel' : 'reschedule'} an appointment!
+
+To get started, I'll need a few details:
+- What date and time would work best for you?
+- What's your email address?
+
+Once you provide these, I can check availability and help you book your appointment.`;
+            } else if (isPracticeInfoQuery) {
+                if (contextBlurb && !contextBlurb.includes('No specific information')) {
+                    reply = `Based on our knowledge base:\n\n${contextBlurb}\n\nIs there anything specific you'd like to know more about?`;
+                } else {
+                    reply = `I don't have that specific information available in our knowledge base right now. Please contact us directly for more details, and we'll be happy to help you!`;
+                }
+            } else {
+                reply = userText
+                    ? `${contextBlurb ? contextBlurb + '\n\n' : ''}Thanks for your message! I'm currently being set up, but I can help with basic questions. For booking appointments or detailed information, please contact us directly.`
+                    : (contextBlurb || 'Hello! How can I assist you today?');
+            }
         }
 
         return {
