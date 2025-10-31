@@ -5,7 +5,11 @@
       "allowedRoles": ["anonymous"]
     },
     {
-      "route": "/_next/*",
+      "route": "/_next/static/*",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/_next/image/*",
       "allowedRoles": ["anonymous"]
     },
     {
@@ -17,19 +21,32 @@
       "allowedRoles": ["authenticated"]
     }
   ],
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://login.microsoftonline.com/a14e016d-a648-4e3a-a17b-821109ccfd0a/v2.0",
+          "clientIdSettingName": "AZURE_CLIENT_ID",
+          "clientSecretSettingName": "AZURE_CLIENT_SECRET"
+        },
+        "userDetailsClaim": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
+      }
+    }
+  },
   "responseOverrides": {
     "401": {
-      "redirect": "/.auth/login/aad?post_login_redirect_url=/",
-      "statusCode": 302
+      "statusCode": 302,
+      "redirect": "/.auth/login/aad"
     }
   },
   "navigationFallback": {
-    "rewrite": "/",
+    "rewrite": "/index.html",
     "exclude": [
-      "/_next/*",
+      "/_next/static/*",
+      "/_next/image/*",
       "/api/*",
       "/.auth/*",
-      "*.{css,scss,js,png,gif,ico,jpg,jpeg,svg,woff,woff2,ttf,eot,json}"
+      "*.{css,scss,js,png,gif,ico,jpg,jpeg,svg,woff,woff2,ttf,eot,json,webp}"
     ]
   }
 }

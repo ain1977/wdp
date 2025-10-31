@@ -45,8 +45,9 @@ resource swa 'Microsoft.Web/staticSites@2022-09-01' = {
 // 1. Go to Static Web App -> Authentication -> Add identity provider
 // 2. Select Microsoft identity provider
 // 3. Create or select an App Registration
-// 4. Set the allowed email to: andrea@liveraltravel.com
-// 5. Configure role-based access control (RBAC) if needed
+// 4. Set "Supported account types" to "Accounts in this organizational directory only" (tenant restriction)
+// 5. Enable "Require assignment" to restrict access further if needed
+// 6. Optionally assign specific users (e.g., andrea@liveraltravel.com) in Enterprise Applications
 
 // Application Insights - temporarily disabled due to provider registration issues
 // resource appi 'Microsoft.Insights/components@2020-02-02' = {
