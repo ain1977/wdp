@@ -17,12 +17,34 @@ const AI_ASSISTANT_TONE = process.env.AI_ASSISTANT_TONE ?? 'warm, supportive, kn
 // --- Microsoft Graph API helpers ---
 const CALENDAR_OWNER_EMAIL = process.env.CALENDAR_OWNER_EMAIL ?? 'andrea@liveraltravel.com';
 
-function getGraphClient(): Client {
-    const credential = new DefaultAzureCredential();
-    const authProvider = new TokenCredentialAuthenticationProvider(credential, {
-        scopes: ['https://graph.microsoft.com/.default']
-    });
-    return Client.initWithMiddleware({ authProvider });
+function getGraphClient(context?: InvocationContext): Client {
+    try {
+        if (context) {
+            context.log('getGraphClient: Initializing DefaultAzureCredential');
+        }
+        const credential = new DefaultAzureCredential();
+        
+        if (context) {
+            context.log('getGraphClient: Creating TokenCredentialAuthenticationProvider');
+        }
+        const authProvider = new TokenCredentialAuthenticationProvider(credential, {
+            scopes: ['https://graph.microsoft.com/.default']
+        });
+        
+        if (context) {
+            context.log('getGraphClient: Initializing Graph Client with middleware');
+        }
+        return Client.initWithMiddleware({ authProvider });
+    } catch (error: any) {
+        if (context) {
+            context.error('getGraphClient: Error initializing Graph client', {
+                errorMessage: error?.message,
+                errorStack: error?.stack,
+                errorType: error?.constructor?.name
+            });
+        }
+        throw error;
+    }
 }
 
 function getSearchClients() {
@@ -200,34 +222,67 @@ export async function sendEmail(req: HttpRequest, context: InvocationContext): P
 
 // Check availability
 export async function checkAvailability(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+    const requestId = context.invocationId;
+    const startTime = Date.now();
+    
     try {
-        const { startDate, endDate } = (await req.json().catch(() => ({}))) as {
+        context.log(`[${requestId}] checkAvailability: Starting availability check`);
+        
+        const { startDate, endDate } = (await req.json().catch((parseError) => {
+            context.error(`[${requestId}] checkAvailability: Failed to parse request body`, parseError);
+            throw parseError;
+        })) as {
             startDate?: string;
             endDate?: string;
         };
 
+        context.log(`[${requestId}] checkAvailability: Request parameters`, { startDate, endDate });
+
         if (!startDate || !endDate) {
+            context.warn(`[${requestId}] checkAvailability: Missing required fields`, {
+                hasStartDate: !!startDate,
+                hasEndDate: !!endDate
+            });
             return { status: 400, jsonBody: { error: 'startDate and endDate required (ISO format)' } };
         }
 
-        const graphClient = getGraphClient();
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+            context.error(`[${requestId}] checkAvailability: Invalid date format`, { startDate, endDate });
+            return { status: 400, jsonBody: { error: 'Invalid date format. Use ISO 8601 format.' } };
+        }
+
+        context.log(`[${requestId}] checkAvailability: Creating Graph client`);
+        const graphClient = getGraphClient(context);
+        
+        const graphApiPath = `/users/${CALENDAR_OWNER_EMAIL}/calendar/getFreeBusy`;
+        context.log(`[${requestId}] checkAvailability: Calling Graph API: ${graphApiPath}`, {
+            calendarOwner: CALENDAR_OWNER_EMAIL,
+            startDate,
+            endDate
+        });
         
         // Query calendar for busy times
         const freeBusy = await graphClient
-            .api(`/users/${CALENDAR_OWNER_EMAIL}/calendar/getFreeBusy`)
+            .api(graphApiPath)
             .post({
                 schedules: [CALENDAR_OWNER_EMAIL],
                 startTime: { dateTime: startDate, timeZone: 'UTC' },
                 endTime: { dateTime: endDate, timeZone: 'UTC' }
             });
 
+        context.log(`[${requestId}] checkAvailability: Received freeBusy response`, {
+            hasValue: !!freeBusy?.value,
+            scheduleCount: freeBusy?.value?.length || 0
+        });
+
         // Calculate available 30-minute slots
         const busyTimes = freeBusy?.value?.[0]?.scheduleItems || [];
         const availableSlots: string[] = [];
         
         // Generate 30-minute slots and filter out busy ones
-        const start = new Date(startDate);
-        const end = new Date(endDate);
         const slotDuration = 30 * 60 * 1000; // 30 minutes in ms
 
         for (let time = new Date(start); time < end; time.setTime(time.getTime() + slotDuration)) {
@@ -243,20 +298,55 @@ export async function checkAvailability(req: HttpRequest, context: InvocationCon
             }
         }
 
+        const duration = Date.now() - startTime;
+        context.log(`[${requestId}] checkAvailability: Successfully calculated availability`, {
+            availableSlotsCount: availableSlots.length,
+            busyTimesCount: busyTimes.length,
+            durationMs: duration
+        });
+
         return {
             status: 200,
             jsonBody: { availableSlots, busyTimes: busyTimes.length }
         };
-    } catch (error) {
-        context.error('checkAvailability error', error);
-        return { status: 500, jsonBody: { error: 'Internal error' } };
+    } catch (error: any) {
+        const duration = Date.now() - startTime;
+        const errorDetails = {
+            requestId,
+            errorMessage: error?.message || 'Unknown error',
+            errorCode: error?.code || error?.statusCode || 'UNKNOWN',
+            errorStack: error?.stack || 'No stack trace',
+            durationMs: duration,
+            calendarOwner: CALENDAR_OWNER_EMAIL,
+            errorType: error?.constructor?.name || typeof error
+        };
+        
+        context.error(`[${requestId}] checkAvailability: Error checking availability`, errorDetails);
+        context.error(`[${requestId}] checkAvailability: Full error object`, error);
+        
+        return { 
+            status: 500, 
+            jsonBody: { 
+                error: 'Internal error',
+                requestId,
+                details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+            } 
+        };
     }
 }
 
 // Create booking (calendar event)
 export async function createBooking(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+    const requestId = context.invocationId;
+    const startTime = Date.now();
+    
     try {
-        const body = (await req.json().catch(() => ({}))) as {
+        context.log(`[${requestId}] createBooking: Starting booking creation request`);
+        
+        const body = (await req.json().catch((parseError) => {
+            context.error(`[${requestId}] createBooking: Failed to parse request body`, parseError);
+            throw parseError;
+        })) as {
             startTime: string; // ISO format
             clientEmail: string;
             location?: string;
@@ -264,23 +354,41 @@ export async function createBooking(req: HttpRequest, context: InvocationContext
             clientName?: string;
         };
 
+        context.log(`[${requestId}] createBooking: Request body parsed`, {
+            startTime: body.startTime,
+            clientEmail: body.clientEmail,
+            hasLocation: !!body.location,
+            hasDietaryNotes: !!body.dietaryNotes,
+            clientName: body.clientName || 'not provided'
+        });
+
         if (!body.startTime || !body.clientEmail) {
+            context.warn(`[${requestId}] createBooking: Missing required fields`, {
+                hasStartTime: !!body.startTime,
+                hasClientEmail: !!body.clientEmail
+            });
             return { status: 400, jsonBody: { error: 'startTime and clientEmail required' } };
         }
 
-        const startTime = new Date(body.startTime);
-        const endTime = new Date(startTime.getTime() + 30 * 60 * 1000); // 30 minutes
+        const appointmentStart = new Date(body.startTime);
+        const appointmentEnd = new Date(appointmentStart.getTime() + 30 * 60 * 1000); // 30 minutes
 
-        const graphClient = getGraphClient();
+        if (isNaN(appointmentStart.getTime())) {
+            context.error(`[${requestId}] createBooking: Invalid startTime format`, { startTime: body.startTime });
+            return { status: 400, jsonBody: { error: 'Invalid startTime format. Use ISO 8601 format.' } };
+        }
+
+        context.log(`[${requestId}] createBooking: Creating Graph client`);
+        const graphClient = getGraphClient(context);
         
         const event = {
             subject: `La Cura Session - ${body.clientName || body.clientEmail}`,
             start: {
-                dateTime: startTime.toISOString(),
+                dateTime: appointmentStart.toISOString(),
                 timeZone: 'UTC'
             },
             end: {
-                dateTime: endTime.toISOString(),
+                dateTime: appointmentEnd.toISOString(),
                 timeZone: 'UTC'
             },
             location: body.location ? { displayName: body.location } : undefined,
@@ -294,9 +402,27 @@ export async function createBooking(req: HttpRequest, context: InvocationContext
             categories: ['La Cura Booking']
         };
 
+        context.log(`[${requestId}] createBooking: Creating calendar event`, {
+            calendarOwner: CALENDAR_OWNER_EMAIL,
+            eventSubject: event.subject,
+            startDateTime: event.start.dateTime,
+            endDateTime: event.end.dateTime
+        });
+
+        const graphApiPath = `/users/${CALENDAR_OWNER_EMAIL}/calendar/events`;
+        context.log(`[${requestId}] createBooking: Calling Graph API: ${graphApiPath}`);
+        
         const createdEvent = await graphClient
-            .api(`/users/${CALENDAR_OWNER_EMAIL}/calendar/events`)
+            .api(graphApiPath)
             .post(event);
+
+        const duration = Date.now() - startTime;
+        context.log(`[${requestId}] createBooking: Successfully created booking`, {
+            eventId: createdEvent.id,
+            startTime: createdEvent.start?.dateTime,
+            endTime: createdEvent.end?.dateTime,
+            durationMs: duration
+        });
 
         return {
             status: 200,
@@ -307,9 +433,49 @@ export async function createBooking(req: HttpRequest, context: InvocationContext
                 webLink: createdEvent.webLink
             }
         };
-    } catch (error) {
-        context.error('createBooking error', error);
-        return { status: 500, jsonBody: { error: 'Internal error' } };
+    } catch (error: any) {
+        const duration = Date.now() - startTime;
+        const errorDetails = {
+            requestId,
+            errorMessage: error?.message || 'Unknown error',
+            errorCode: error?.code || error?.statusCode || 'UNKNOWN',
+            errorStack: error?.stack || 'No stack trace',
+            durationMs: duration,
+            calendarOwner: CALENDAR_OWNER_EMAIL,
+            errorType: error?.constructor?.name || typeof error
+        };
+        
+        context.error(`[${requestId}] createBooking: Error creating booking`, errorDetails);
+        context.error(`[${requestId}] createBooking: Full error object`, error);
+        
+        // Return more specific error messages
+        if (error?.code === 'Forbidden' || error?.statusCode === 403) {
+            return { 
+                status: 403, 
+                jsonBody: { 
+                    error: 'Permission denied. Check calendar permissions and Managed Identity configuration.',
+                    details: error?.message 
+                } 
+            };
+        }
+        if (error?.code === 'NotFound' || error?.statusCode === 404) {
+            return { 
+                status: 404, 
+                jsonBody: { 
+                    error: 'Calendar not found. Check CALENDAR_OWNER_EMAIL configuration.',
+                    details: error?.message 
+                } 
+            };
+        }
+        
+        return { 
+            status: 500, 
+            jsonBody: { 
+                error: 'Internal error',
+                requestId,
+                details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+            } 
+        };
     }
 }
 
@@ -322,7 +488,7 @@ export async function listBookings(req: HttpRequest, context: InvocationContext)
             return { status: 400, jsonBody: { error: 'email query parameter or x-user-email header required' } };
         }
 
-        const graphClient = getGraphClient();
+        const graphClient = getGraphClient(context);
         
         // Get events where user is an attendee
         const events = await graphClient
@@ -367,7 +533,7 @@ export async function cancelBooking(req: HttpRequest, context: InvocationContext
             return { status: 400, jsonBody: { error: 'eventId and clientEmail required' } };
         }
 
-        const graphClient = getGraphClient();
+        const graphClient = getGraphClient(context);
         
         // Verify the event exists and user is an attendee
         const event = await graphClient
@@ -407,7 +573,7 @@ export async function rescheduleBooking(req: HttpRequest, context: InvocationCon
             return { status: 400, jsonBody: { error: 'eventId, newStartTime, and clientEmail required' } };
         }
 
-        const graphClient = getGraphClient();
+        const graphClient = getGraphClient(context);
         
         // Verify the event exists and user is an attendee
         const event = await graphClient

@@ -4,8 +4,8 @@ param location string = resourceGroup().location
 @description('Static Web App name')
 param swaName string = 'swa-${uniqueString(resourceGroup().id)}'
 
-@description('Application Insights name')
-param appInsightsName string = 'appi-${uniqueString(resourceGroup().id)}'
+@description('Application Insights name (existing)')
+param appInsightsName string = 'func-xob7nugiarm7e202510300620'
 
 @description('Key Vault name (must be globally unique)')
 param keyVaultName string = 'kv${uniqueString(resourceGroup().id)}'
@@ -60,15 +60,12 @@ resource swa 'Microsoft.Web/staticSites@2022-09-01' = {
 // 4. Grant admin consent for the permissions
 // 5. Function App will use Managed Identity to authenticate to Graph API
 
-// Application Insights - temporarily disabled due to provider registration issues
-// resource appi 'Microsoft.Insights/components@2020-02-02' = {
-//   name: appInsightsName
-//   location: location
-//   kind: 'web'
-//   properties: {
-//     Application_Type: 'web'
-//   }
-// }
+// Application Insights - reference existing instance
+// Note: Application Insights already exists: func-xob7nugiarm7e202510300620
+// Using reference to get connection string and instrumentation key
+resource appi 'Microsoft.Insights/components@2020-02-02' existing = {
+  name: appInsightsName
+}
 
 // Storage Account for content, chat history, and social media assets
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
@@ -242,6 +239,14 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'CALENDAR_OWNER_EMAIL'
           value: 'andrea@liveraltravel.com'
         }
+        {
+          name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
+          value: appi.properties.InstrumentationKey
+        }
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appi.properties.ConnectionString
+        }
       ]
     }
   }
@@ -255,7 +260,8 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
 
 @description('Outputs')
 output staticWebAppId string = swa.id
-// output appInsightsConnectionString string = appi.properties.ConnectionString
+output appInsightsConnectionString string = appi.properties.ConnectionString
+output appInsightsInstrumentationKey string = appi.properties.InstrumentationKey
 output keyVaultUri string = kv.properties.vaultUri
 output storageAccountName string = storageAccount.name
 output openAiEndpoint string = openAi.properties.endpoint
