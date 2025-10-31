@@ -27,9 +27,15 @@ function getOpenAIClient(): OpenAI | null {
     if (!OPENAI_ENDPOINT || !OPENAI_API_KEY) {
         return null;
     }
+    // Azure OpenAI endpoint format: https://{resource-name}.openai.azure.com
+    // For the openai package, we need to append /openai/deployments/{deployment}
+    const baseURL = OPENAI_ENDPOINT.includes('/openai/deployments/') 
+        ? OPENAI_ENDPOINT 
+        : `${OPENAI_ENDPOINT}/openai/deployments/${OPENAI_DEPLOYMENT_NAME}`;
+    
     return new OpenAI({
         apiKey: OPENAI_API_KEY,
-        baseURL: `${OPENAI_ENDPOINT}/openai/deployments/${OPENAI_DEPLOYMENT_NAME}`,
+        baseURL: baseURL,
         defaultQuery: { 'api-version': '2024-02-15-preview' },
         defaultHeaders: { 'api-key': OPENAI_API_KEY }
     });
@@ -145,35 +151,57 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
     try {
         context.log(`[${requestId}] chatAsk: Starting chat request`);
         
-        const { messages } = (await req.json().catch((parseError) => {
+        const body = (await req.json().catch((parseError) => {
             context.error(`[${requestId}] chatAsk: Failed to parse request body`, parseError);
             throw parseError;
-        })) as { messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }> };
+        })) as { 
+            messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }>;
+            menuSelection?: boolean;
+        };
         
+        const { messages, menuSelection } = body;
         const lastUser = [...(messages ?? [])].reverse().find(m => m.role === 'user');
         const userText = lastUser?.content?.slice(0, 1000) ?? '';
+        
+        // Detect if this is a practice info query
+        const isPracticeInfoQuery = userText.toLowerCase().includes('info about our practice') || 
+                                   userText.toLowerCase().includes('about our practice') ||
+                                   userText.toLowerCase().includes('practice information') ||
+                                   userText.toLowerCase().includes('tell me about');
 
         context.log(`[${requestId}] chatAsk: Processing user message`, {
             messageLength: userText.length,
-            messageCount: messages?.length || 0
+            messageCount: messages?.length || 0,
+            isPracticeInfoQuery,
+            menuSelection
         });
 
         // If AI Search configured, retrieve relevant content (text/BM25 for now)
         let contextBlurb = '';
+        let searchQuery = userText || '*';
+        
+        // For practice info queries, use a broader search
+        if (isPracticeInfoQuery) {
+            searchQuery = 'practice services information about La Cura';
+        }
+        
         if (AI_SEARCH_ENDPOINT && AI_SEARCH_API_KEY) {
             try {
-                context.log(`[${requestId}] chatAsk: Searching Azure AI Search`);
+                context.log(`[${requestId}] chatAsk: Searching Azure AI Search`, { searchQuery });
                 await ensureIndexExists(context);
                 const { searchClient } = getSearchClients();
-                const results = await searchClient.search(userText || '*', { top: 5, queryType: 'simple', includeTotalCount: false });
+                const results = await searchClient.search(searchQuery, { top: 8, queryType: 'simple', includeTotalCount: false });
                 const snippets: string[] = [];
                 for await (const r of results.results) {
                     const doc = r.document as any;
-                    if (doc?.content) snippets.push(`- ${doc.title ? doc.title + ': ' : ''}${String(doc.content).slice(0, 300)}${String(doc.content).length > 300 ? '…' : ''}`);
+                    if (doc?.content) snippets.push(`${doc.title ? doc.title + ': ' : ''}${String(doc.content).slice(0, 400)}${String(doc.content).length > 400 ? '…' : ''}`);
                 }
                 if (snippets.length) {
-                    contextBlurb = `Relevant info:\n${snippets.join('\n')}`;
+                    contextBlurb = `Information from our knowledge base:\n${snippets.join('\n\n')}`;
                     context.log(`[${requestId}] chatAsk: Found ${snippets.length} relevant search results`);
+                } else if (isPracticeInfoQuery) {
+                    contextBlurb = 'No specific information found in our knowledge base.';
+                    context.log(`[${requestId}] chatAsk: No search results found for practice info query`);
                 }
             } catch (e) {
                 context.warn(`[${requestId}] chatAsk: AI Search query failed`, e);
@@ -181,7 +209,18 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
         }
 
         // Build system prompt with context
-        const systemPrompt = `${AI_ASSISTANT_SYSTEM_PROMPT}\n\nTone: ${AI_ASSISTANT_TONE}${contextBlurb ? `\n\n${contextBlurb}` : ''}`;
+        // For practice info queries, enforce using ONLY the vector DB results
+        let systemPrompt = `${AI_ASSISTANT_SYSTEM_PROMPT}\n\nTone: ${AI_ASSISTANT_TONE}`;
+        
+        if (isPracticeInfoQuery) {
+            if (contextBlurb && !contextBlurb.includes('No specific information')) {
+                systemPrompt += `\n\nIMPORTANT: The user is asking about our practice. You MUST ONLY use the information provided below from our knowledge base. Do NOT use any general knowledge or training data about similar services. If the information below doesn't answer the question, say "I don't have that specific information in our knowledge base. Please contact us directly for more details."\n\n${contextBlurb}`;
+            } else {
+                systemPrompt += `\n\nIMPORTANT: The user is asking about our practice, but no relevant information was found in our knowledge base. Respond by saying that you don't have that specific information available and suggest they contact us directly. Do NOT make up or assume any information about our practice.`;
+            }
+        } else if (contextBlurb) {
+            systemPrompt += `\n\n${contextBlurb}`;
+        }
         
         // Prepare messages for OpenAI
         const openAIMessages: Array<{ role: 'system' | 'user' | 'assistant', content: string }> = [

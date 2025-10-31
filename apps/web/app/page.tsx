@@ -91,21 +91,26 @@ function AssistantWidget() {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showMenu, setShowMenu] = useState(true)
   const [messages, setMessages] = useState<Array<{ role: 'user'|'assistant'; content: string }>>([
-    { role: 'assistant', content: 'Hi! I can help with questions and scheduling. How can I help today?' }
+    { role: 'assistant', content: 'Hi! What do you need assistant with?' }
   ])
 
-  async function send() {
-    const text = input.trim()
-    if (!text) return
-    setMessages((m) => [...m, { role: 'user', content: text }])
+  async function send(text?: string) {
+    const messageText = (text || input.trim())
+    if (!messageText) return
+    setMessages((m) => [...m, { role: 'user', content: messageText }])
     setInput('')
+    setShowMenu(false)
     setLoading(true)
     try {
       const res = await fetch(`/api/chat/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...messages, { role: 'user', content: text }] })
+        body: JSON.stringify({ 
+          messages: [...messages, { role: 'user', content: messageText }],
+          menuSelection: text ? true : false
+        })
       })
       const data = await res.json().catch(() => ({}))
       const reply = data?.message?.content || 'Sorry, something went wrong.'
@@ -115,6 +120,13 @@ function AssistantWidget() {
     } finally {
       setLoading(false)
     }
+  }
+
+  function handleMenuClick(option: string) {
+    const menuText = option === 'booking' 
+      ? 'Schedule, cancel or move an appointment'
+      : 'Info about our practice'
+    send(menuText)
   }
 
   return (
@@ -149,6 +161,37 @@ function AssistantWidget() {
                 }}>{m.content}</div>
               </div>
             ))}
+            {showMenu && messages.length === 1 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ 
+                  padding: '12px 16px', 
+                  background: '#f8f9fa', 
+                  borderRadius: 8, 
+                  marginBottom: 8,
+                  cursor: 'pointer',
+                  border: '1px solid #e5e5e5',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#e9ecef'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#f8f9fa'}
+                onClick={() => handleMenuClick('booking')}>
+                  📅 Schedule, cancel or move an appointment
+                </div>
+                <div style={{ 
+                  padding: '12px 16px', 
+                  background: '#f8f9fa', 
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  border: '1px solid #e5e5e5',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#e9ecef'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#f8f9fa'}
+                onClick={() => handleMenuClick('info')}>
+                  ℹ️ Info about our practice
+                </div>
+              </div>
+            )}
             {loading && <div style={{ color: '#666', fontSize: 13 }}>Thinking…</div>}
           </div>
           <div style={{ padding: 10, borderTop: '1px solid #eee' }}>
