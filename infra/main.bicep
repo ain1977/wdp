@@ -49,6 +49,16 @@ resource swa 'Microsoft.Web/staticSites@2022-09-01' = {
 // 5. Enable "Require assignment" to restrict access further if needed
 // 6. Optionally assign specific users (e.g., andrea@liveraltravel.com) in Enterprise Applications
 
+// Microsoft Graph API Permissions (for Calendar access)
+// Note: Must be configured in Azure Portal after deployment
+// Steps:
+// 1. Go to App Registration (e276d260-a10a-43a4-aefa-dccaaace3d23) -> API permissions
+// 2. Add Microsoft Graph permissions:
+//    - Calendars.ReadWrite (Application permission) - for Function App to access calendar
+//    - User.Read (Delegated permission) - for reading user info
+// 3. Grant admin consent for the permissions
+// 4. Function App will use Managed Identity to authenticate to Graph API
+
 // Application Insights - temporarily disabled due to provider registration issues
 // resource appi 'Microsoft.Insights/components@2020-02-02' = {
 //   name: appInsightsName
@@ -226,6 +236,10 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'AI_ASSISTANT_TONE'
           value: 'warm, supportive, knowledgeable'
+        }
+        {
+          name: 'CALENDAR_OWNER_EMAIL'
+          value: 'andrea@liveraltravel.com'
         }
       ]
     }
