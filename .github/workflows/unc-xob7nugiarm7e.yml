@@ -28,6 +28,13 @@ jobs:
         working-directory: api/functions
         run: npm run build
 
+      - name: Verify dependencies
+        working-directory: api/functions
+        run: |
+          echo "Checking critical dependencies..."
+          ls -la node_modules/@azure/functions || echo "ERROR: @azure/functions not found!"
+          ls -la node_modules/openai || echo "ERROR: openai not found!"
+
       - name: Deploy to Azure Functions
         uses: Azure/functions-action@v1
         with:
