@@ -101,6 +101,7 @@ resource openAi 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
 }
 
 // GPT-4 Deployment (using GPT-4o which is the latest model)
+// Note: SKU varies by region and model - Azure will use default if not specified
 resource gpt4Deployment 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = {
   parent: openAi
   name: 'gpt-4'
@@ -112,10 +113,6 @@ resource gpt4Deployment 'Microsoft.CognitiveServices/accounts/deployments@2023-0
     }
     raiPolicyName: 'Microsoft.Default'
     versionUpgradeOption: 'OnceNewDefaultVersionAvailable'
-  }
-  sku: {
-    name: 'Standard'
-    capacity: 1
   }
 }
 
