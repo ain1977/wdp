@@ -34,3 +34,5 @@ jobs:
           app-name: func-xob7nugiarm7e
           package: api/functions
           publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+          scm-do-build-during-deployment: false
+          enable-oryx-build: false
