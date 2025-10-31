@@ -24,6 +24,122 @@ const AI_ASSISTANT_TONE = process.env.AI_ASSISTANT_TONE ?? 'warm, supportive, kn
 // --- Microsoft Graph API helpers ---
 const CALENDAR_OWNER_EMAIL = process.env.CALENDAR_OWNER_EMAIL ?? 'andrea@liveraltravel.com';
 
+// --- Booking Workflow Helpers ---
+
+// Parse date/time from user text (simple patterns)
+function parseDateFromText(text: string): { date?: Date; hasDate: boolean; hasTime: boolean } {
+    const lower = text.toLowerCase();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Patterns: "tomorrow", "next week", "monday", "tuesday", etc.
+    let targetDate: Date | undefined;
+    let hasTime = false;
+    
+    // Check for "tomorrow"
+    if (lower.includes('tomorrow')) {
+        targetDate = new Date(today);
+        targetDate.setDate(targetDate.getDate() + 1);
+    }
+    // Check for "next week"
+    else if (lower.includes('next week')) {
+        targetDate = new Date(today);
+        targetDate.setDate(targetDate.getDate() + 7);
+    }
+    // Check for day names
+    else {
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        for (let i = 0; i < days.length; i++) {
+            if (lower.includes(days[i])) {
+                const dayIndex = i;
+                const currentDay = today.getDay();
+                let daysToAdd = (dayIndex - currentDay + 7) % 7;
+                if (daysToAdd === 0) daysToAdd = 7; // Next occurrence
+                targetDate = new Date(today);
+                targetDate.setDate(targetDate.getDate() + daysToAdd);
+                break;
+            }
+        }
+    }
+    
+    // Check for time mentions (morning, afternoon, evening, or specific times)
+    if (lower.includes('morning') || lower.includes('am') || lower.match(/\d+\s*(am|pm)/i)) {
+        hasTime = true;
+    } else if (lower.includes('afternoon') || lower.includes('evening') || lower.includes('pm')) {
+        hasTime = true;
+    }
+    
+    return { date: targetDate, hasDate: !!targetDate, hasTime };
+}
+
+// Format available slots for display
+function formatAvailableSlots(slots: string[]): string {
+    if (slots.length === 0) {
+        return 'I don\'t see any available slots in that time range. Would you like me to check a different date or time?';
+    }
+    
+    // Group by date
+    const byDate: { [key: string]: string[] } = {};
+    slots.forEach(slot => {
+        const date = new Date(slot);
+        const dateKey = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        if (!byDate[dateKey]) byDate[dateKey] = [];
+        byDate[dateKey].push(timeStr);
+    });
+    
+    let formatted = 'I found these available 30-minute slots:\n\n';
+    Object.keys(byDate).forEach(date => {
+        formatted += `**${date}:**\n`;
+        byDate[date].forEach(time => {
+            formatted += `  • ${time}\n`;
+        });
+        formatted += '\n';
+    });
+    
+    formatted += 'Which time works best for you? Just let me know the date and time you prefer.';
+    return formatted;
+}
+
+// Check availability helper (internal call)
+async function checkAvailabilityInternal(startDate: string, endDate: string, context: InvocationContext): Promise<{ availableSlots: string[]; error?: string }> {
+    try {
+        const graphClient = getGraphClient(context);
+        const freeBusy = await graphClient
+            .api(`/users/${CALENDAR_OWNER_EMAIL}/calendar/getFreeBusy`)
+            .post({
+                schedules: [CALENDAR_OWNER_EMAIL],
+                startTime: { dateTime: startDate, timeZone: 'UTC' },
+                endTime: { dateTime: endDate, timeZone: 'UTC' }
+            });
+        
+        const busyTimes = freeBusy?.value?.[0]?.scheduleItems || [];
+        const availableSlots: string[] = [];
+        const slotDuration = 30 * 60 * 1000; // 30 minutes
+        
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        for (let time = new Date(start); time < end; time.setTime(time.getTime() + slotDuration)) {
+            const slotEnd = new Date(time.getTime() + slotDuration);
+            const isBusy = busyTimes.some((busy: any) => {
+                const busyStart = new Date(busy.start.dateTime);
+                const busyEnd = new Date(busy.end.dateTime);
+                return (time < busyEnd && slotEnd > busyStart);
+            });
+            
+            if (!isBusy) {
+                availableSlots.push(time.toISOString());
+            }
+        }
+        
+        return { availableSlots };
+    } catch (error: any) {
+        context.error('checkAvailabilityInternal error', error);
+        return { availableSlots: [], error: error?.message || 'Failed to check availability' };
+    }
+}
+
 function getOpenAIClient(): OpenAI | null {
     if (!OPENAI_ENDPOINT || !OPENAI_API_KEY) {
         return null;
@@ -160,105 +276,235 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
             menuSelection?: boolean;
         };
         
-        const { messages, menuSelection } = body;
+        const { messages } = body;
         const lastUser = [...(messages ?? [])].reverse().find(m => m.role === 'user');
         const userText = lastUser?.content?.slice(0, 1000) ?? '';
+
+        // Detect booking-related queries (scheduling, canceling, rescheduling)
+        const isScheduleQuery = userText.toLowerCase().includes('schedule') || 
+                               userText.toLowerCase().includes('book') ||
+                               userText.toLowerCase().includes('appointment') && !userText.toLowerCase().includes('cancel') && !userText.toLowerCase().includes('reschedule') ||
+                               userText.toLowerCase().includes('set up') ||
+                               userText.toLowerCase().includes('make an appointment');
         
-        // Detect if this is a practice info query (strict matching)
-        const isPracticeInfoQuery = userText.toLowerCase().includes('info about our practice') || 
-                                   userText.toLowerCase().includes('about our practice') ||
-                                   userText.toLowerCase().includes('practice information') ||
-                                   (userText.toLowerCase().includes('tell me about') && userText.toLowerCase().includes('practice'));
+        const isCancelQuery = userText.toLowerCase().includes('cancel') ||
+                             userText.toLowerCase().includes('remove') ||
+                             userText.toLowerCase().includes('delete');
         
-        // Detect booking-related queries
-        const isBookingQuery = userText.toLowerCase().includes('schedule') || 
-                              userText.toLowerCase().includes('book') ||
-                              userText.toLowerCase().includes('appointment') ||
-                              userText.toLowerCase().includes('cancel') ||
-                              userText.toLowerCase().includes('reschedule') ||
-                              userText.toLowerCase().includes('move') ||
-                              userText.toLowerCase().includes('availability');
+        const isRescheduleQuery = userText.toLowerCase().includes('reschedule') ||
+                                 userText.toLowerCase().includes('move') ||
+                                 userText.toLowerCase().includes('change') ||
+                                 userText.toLowerCase().includes('different time') ||
+                                 userText.toLowerCase().includes('different date');
+        
+        const isBookingQuery = isScheduleQuery || isCancelQuery || isRescheduleQuery;
+        
+        // Detect if user is providing booking details (email, time, date, confirm)
+        const isBookingConfirmation = userText.toLowerCase().includes('@') || // email
+                                     userText.toLowerCase().match(/\d{1,2}:\d{2}/) || // time format
+                                     (userText.toLowerCase().includes('yes') && isBookingQuery) ||
+                                     userText.toLowerCase().includes('confirm') ||
+                                     userText.toLowerCase().includes('that works') ||
+                                     userText.toLowerCase().includes('sounds good');
 
         context.log(`[${requestId}] chatAsk: Processing user message`, {
             messageLength: userText.length,
             messageCount: messages?.length || 0,
-            isPracticeInfoQuery,
-            isBookingQuery,
-            menuSelection
+            isScheduleQuery,
+            isCancelQuery,
+            isRescheduleQuery,
+            isBookingQuery
         });
+        
+        // REJECT non-booking queries
+        if (!isBookingQuery && userText.trim().length > 0) {
+            const reply = `I'm here to help you with appointments only. I can help you:
+- Schedule a new appointment
+- Cancel an existing appointment  
+- Reschedule or move an appointment
 
-        // If AI Search configured, retrieve relevant content (text/BM25 for now)
-        let contextBlurb = '';
-        let searchQuery = userText || '*';
-        
-        // For practice info queries, use a broader search
-        if (isPracticeInfoQuery) {
-            searchQuery = 'practice services information about La Cura';
-        }
-        
-        if (AI_SEARCH_ENDPOINT && AI_SEARCH_API_KEY) {
-            try {
-                context.log(`[${requestId}] chatAsk: Searching Azure AI Search`, { searchQuery });
-                await ensureIndexExists(context);
-                const { searchClient } = getSearchClients();
-                const results = await searchClient.search(searchQuery, { top: 8, queryType: 'simple', includeTotalCount: false });
-                const snippets: string[] = [];
-                for await (const r of results.results) {
-                    const doc = r.document as any;
-                    if (doc?.content) snippets.push(`${doc.title ? doc.title + ': ' : ''}${String(doc.content).slice(0, 400)}${String(doc.content).length > 400 ? '…' : ''}`);
+What would you like to do?`;
+            return {
+                status: 200,
+                jsonBody: {
+                    message: { role: 'assistant', content: reply }
                 }
-                if (snippets.length) {
-                    contextBlurb = `Information from our knowledge base:\n${snippets.join('\n\n')}`;
-                    context.log(`[${requestId}] chatAsk: Found ${snippets.length} relevant search results`);
-                } else if (isPracticeInfoQuery) {
-                    contextBlurb = 'No specific information found in our knowledge base.';
-                    context.log(`[${requestId}] chatAsk: No search results found for practice info query`);
-                }
-            } catch (e) {
-                context.warn(`[${requestId}] chatAsk: AI Search query failed`, e);
-            }
+            };
         }
 
-        // Build system prompt with context
-        // For practice info queries, enforce STRICT guardrails - ONLY vector DB results
-        let systemPrompt = `${AI_ASSISTANT_SYSTEM_PROMPT}\n\nTone: ${AI_ASSISTANT_TONE}`;
+        // Build system prompt - ONLY handle booking operations
+        let systemPrompt = `You are an Appointment Assistant for La Cura. Your ONLY purpose is to help users with:
+1. Scheduling new appointments
+2. Canceling existing appointments
+3. Rescheduling/moving existing appointments
+
+You CANNOT answer questions about services, practice information, nutrition, or anything else. If asked anything else, politely redirect: "I'm here to help with appointments only. I can help you schedule, cancel, or reschedule an appointment. What would you like to do?"
+
+Tone: warm, supportive, professional, concise
+
+`;
         
-        if (isPracticeInfoQuery) {
-            // STRONG GUARDRAILS: Practice info MUST come ONLY from vector DB
-            if (contextBlurb && !contextBlurb.includes('No specific information')) {
-                systemPrompt += `\n\n🚨 CRITICAL RULE - STRICT ENFORCEMENT 🚨
-The user is asking about our practice. You MUST follow these rules STRICTLY:
+        if (isScheduleQuery) {
+            // DETAILED SCHEDULING WORKFLOW
+            systemPrompt += `\n\n📅 SCHEDULING WORKFLOW - Follow these steps EXACTLY:
 
-1. USE ONLY the information provided below from our knowledge base
-2. DO NOT use any general knowledge, training data, or assumptions about similar services
-3. DO NOT infer, extrapolate, or make up any information
-4. If the information below doesn't fully answer the question, you MUST say exactly: "I don't have that specific information in our knowledge base. Please contact us directly for more details."
-5. DO NOT combine knowledge base info with general knowledge
-6. DO NOT provide generic advice or common practices unless explicitly stated in the knowledge base
+STEP 1 - INITIAL REQUEST:
+When user asks to schedule/book an appointment:
+- Respond: "I'd be happy to help you schedule an appointment! Let me check the calendar for available slots."
+- If user mentions a date/time preference (e.g., "tomorrow", "Monday", "next week"), acknowledge it
+- IMMEDIATELY check availability (availability data will be provided below)
 
-Information from our knowledge base:
-${contextBlurb}
+STEP 2 - SHOW AVAILABILITY:
+After availability check, present slots like this EXACT format:
+"I found these available 30-minute slots:
 
-Remember: If it's not in the knowledge base above, you MUST say you don't have that information.`;
-            } else {
-                systemPrompt += `\n\n🚨 CRITICAL RULE - STRICT ENFORCEMENT 🚨
-The user is asking about our practice, but NO relevant information was found in our knowledge base.
+**Monday, November 4:**
+  • 9:00 AM
+  • 2:00 PM
+  • 4:30 PM
 
-You MUST respond with exactly this message (or similar, but conveying the same meaning):
-"I don't have that specific information available in our knowledge base. Please contact us directly for more details, and we'll be happy to help you."
+**Tuesday, November 5:**
+  • 10:00 AM
+  • 3:00 PM
 
-DO NOT:
-- Make up information
-- Use general knowledge about similar services
-- Provide generic advice
-- Assume or infer anything about our practice`;
-            }
-        } else if (isBookingQuery) {
-            // For booking queries, be conversational and help find slots
-            systemPrompt += `\n\nYou are helping the user with scheduling, canceling, or rescheduling appointments. Be conversational and helpful. Ask clarifying questions if needed (like preferred dates/times, email address). You can help them find available slots and guide them through the booking process.${contextBlurb ? `\n\n${contextBlurb}` : ''}`;
-        } else if (contextBlurb) {
-            // General queries can use both knowledge base and model knowledge
-            systemPrompt += `\n\n${contextBlurb}`;
+Which time works best for you?"
+
+- If no slots found: "I don't see any available slots in that time range. Would you like me to check a different date or time?"
+- Always group by date, use bullet points, show times in 12-hour format
+
+STEP 3 - COLLECT TIME SELECTION:
+When user selects a time (e.g., "Monday at 2 PM", "2:00 PM works", "the second one"):
+- Confirm clearly: "Great! I have Monday, November 4 at 2:00 PM available."
+- Then ask: "What's your email address so I can send you the calendar invite?"
+
+STEP 4 - COLLECT EMAIL:
+- Wait for email address
+- Validate format (should contain @)
+- If unclear, ask: "Could you please provide your email address?"
+
+STEP 5 - FINAL CONFIRMATION:
+Once you have both time and email:
+- Summarize: "Perfect! I'm booking a 30-minute session for [DATE] at [TIME] and sending the invite to [EMAIL]. Does that sound good?"
+- Wait for confirmation (yes/confirm/sounds good/perfect)
+
+STEP 6 - COMPLETE BOOKING:
+After user confirms:
+- Respond: "Great! Your appointment is confirmed. You'll receive a calendar invite shortly at [EMAIL]. Looking forward to our session on [DATE] at [TIME]!"
+- Note: The actual booking creation happens via API call from the frontend
+
+RULES:
+- NEVER create booking until you have: confirmed date/time + email + user confirmation
+- Always check availability FIRST before asking for email
+- Be warm and conversational but stay focused
+- If user provides email early, acknowledge but still follow the workflow
+- Keep each response concise (2-3 sentences max)`;
+        
+        } else if (isCancelQuery) {
+            // DETAILED CANCELLING WORKFLOW
+            systemPrompt += `\n\n❌ CANCELLING WORKFLOW - Follow these steps EXACTLY:
+
+STEP 1 - INITIAL REQUEST:
+When user asks to cancel:
+- Respond: "I can help you cancel your appointment. To find your appointment, I'll need your email address."
+- Ask: "What email address did you use when booking?"
+
+STEP 2 - COLLECT EMAIL:
+- Wait for email address
+- Validate format (should contain @)
+- If unclear, ask: "Could you please provide the email address you used for booking?"
+
+STEP 3 - LOOK UP APPOINTMENTS:
+After receiving email:
+- Say: "Let me look up your appointments..."
+- List all appointments found for that email, formatted like:
+  "I found these appointments:
+
+  1. Monday, November 4 at 2:00 PM
+  2. Friday, November 8 at 10:00 AM
+  
+  Which one would you like to cancel?"
+
+STEP 4 - CONFIRM CANCELLATION:
+When user selects which appointment to cancel:
+- Confirm: "I'll cancel your appointment on [DATE] at [TIME]. Is that correct?"
+- Wait for confirmation (yes/confirm/correct)
+
+STEP 5 - COMPLETE CANCELLATION:
+After user confirms:
+- Respond: "Your appointment on [DATE] at [TIME] has been cancelled. You should receive a cancellation confirmation email shortly. Is there anything else I can help you with?"
+- Note: The actual cancellation happens via API call from the frontend
+
+RULES:
+- Always verify email before looking up appointments
+- Show all appointments clearly numbered
+- Require explicit confirmation before canceling
+- Be empathetic but professional`;
+        
+        } else if (isRescheduleQuery) {
+            // DETAILED RESCHEDULING WORKFLOW
+            systemPrompt += `\n\n🔄 RESCHEDULING WORKFLOW - Follow these steps EXACTLY:
+
+STEP 1 - INITIAL REQUEST:
+When user asks to reschedule/move/change:
+- Respond: "I can help you reschedule your appointment. First, I need to find your current appointment."
+- Ask: "What email address did you use when booking?"
+
+STEP 2 - COLLECT EMAIL:
+- Wait for email address
+- Validate format (should contain @)
+- If unclear, ask: "Could you please provide the email address you used for booking?"
+
+STEP 3 - LOOK UP CURRENT APPOINTMENT:
+After receiving email:
+- Say: "Let me look up your appointments..."
+- List all appointments found, formatted like:
+  "I found these appointments:
+
+  1. Monday, November 4 at 2:00 PM
+  2. Friday, November 8 at 10:00 AM
+  
+  Which one would you like to reschedule?"
+
+STEP 4 - SELECT APPOINTMENT TO MOVE:
+When user selects which appointment:
+- Confirm: "I'll help you reschedule your appointment on [DATE] at [TIME]."
+- Ask: "What date or time would work better for you? (e.g., 'next Monday', 'tomorrow afternoon')"
+
+STEP 5 - CHECK NEW AVAILABILITY:
+After user provides new date/time preference:
+- Say: "Let me check availability for that time..."
+- IMMEDIATELY check availability (availability data will be provided below)
+- Show available slots in the same format as scheduling
+
+STEP 6 - SELECT NEW TIME:
+Present available slots:
+"I found these available slots:
+
+**Monday, November 11:**
+  • 9:00 AM
+  • 2:00 PM
+
+**Tuesday, November 12:**
+  • 10:00 AM
+  • 3:00 PM
+
+Which time works better for you?"
+
+STEP 7 - CONFIRM RESCHEDULING:
+When user selects new time:
+- Summarize: "Perfect! I'll move your appointment from [OLD DATE] at [OLD TIME] to [NEW DATE] at [NEW TIME]. Does that work for you?"
+- Wait for confirmation (yes/confirm/sounds good)
+
+STEP 8 - COMPLETE RESCHEDULING:
+After user confirms:
+- Respond: "Great! Your appointment has been rescheduled. Your new appointment is on [NEW DATE] at [NEW TIME]. You'll receive updated calendar invites for both the cancellation and new appointment. Is there anything else I can help you with?"
+- Note: The actual rescheduling happens via API call from the frontend
+
+RULES:
+- Always find current appointment FIRST before checking new availability
+- Show both old and new appointment details in confirmation
+- Require explicit confirmation before rescheduling
+- Be helpful and patient`;
         }
         
         // Prepare messages for OpenAI
@@ -287,11 +533,66 @@ DO NOT:
                     messageCount: openAIMessages.length
                 });
                 
+                // For scheduling and rescheduling queries, check availability if user mentions dates/times
+                let availabilityContext = '';
+                
+                if ((isScheduleQuery || isRescheduleQuery) && !isBookingConfirmation) {
+                    // Parse date from user text
+                    const dateInfo = parseDateFromText(userText);
+                    
+                    // Default: check next 7 days
+                    const startDate = new Date();
+                    startDate.setHours(0, 0, 0, 0);
+                    const endDate = new Date(startDate);
+                    endDate.setDate(endDate.getDate() + 7);
+                    endDate.setHours(23, 59, 59, 999);
+                    
+                    // If user specified a date, adjust range
+                    if (dateInfo.date) {
+                        startDate.setTime(dateInfo.date.getTime());
+                        endDate.setTime(dateInfo.date.getTime());
+                        endDate.setHours(23, 59, 59, 999);
+                    }
+                    
+                    context.log(`[${requestId}] chatAsk: Checking availability`, {
+                        startDate: startDate.toISOString(),
+                        endDate: endDate.toISOString(),
+                        userMentionedDate: dateInfo.hasDate,
+                        queryType: isScheduleQuery ? 'schedule' : 'reschedule'
+                    });
+                    
+                    const availabilityResult = await checkAvailabilityInternal(
+                        startDate.toISOString(),
+                        endDate.toISOString(),
+                        context
+                    );
+                    
+                    if (availabilityResult.availableSlots.length > 0) {
+                        availabilityContext = `\n\nAVAILABLE SLOTS (from calendar check):\n${formatAvailableSlots(availabilityResult.availableSlots)}\n\nUse this EXACT information to show the user available times. Present it in the format specified in the workflow.`;
+                    } else {
+                        availabilityContext = `\n\nAVAILABILITY CHECK RESULT: No available slots found in the requested time range. Suggest checking a different date or time range.`;
+                    }
+                    
+                    // Add availability context to system prompt
+                    openAIMessages[0].content += availabilityContext;
+                }
+                
+                // For cancel queries, we may need to look up appointments
+                if (isCancelQuery) {
+                    // Check if user has provided email
+                    const emailMatch = userText.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
+                    if (emailMatch) {
+                        // Look up appointments for this email
+                        // This would need to call listBookings, but for now we'll let OpenAI guide the conversation
+                        context.log(`[${requestId}] chatAsk: User provided email for cancellation lookup`, { email: emailMatch[0] });
+                    }
+                }
+                
                 const response = await openAIClient.chat.completions.create({
                     model: OPENAI_DEPLOYMENT_NAME,
                     messages: openAIMessages,
                     temperature: 0.7,
-                    max_tokens: 500
+                    max_tokens: 600 // Increased for longer booking responses
                 });
                 
                 reply = response.choices[0]?.message?.content || 'I apologize, but I couldn\'t generate a response.';
@@ -310,8 +611,8 @@ DO NOT:
                 });
                 // Fallback to stub if OpenAI fails
                 reply = userText
-                    ? `${contextBlurb ? contextBlurb + '\n\n' : ''}I apologize, but I'm having trouble processing your request right now. Please try again or contact us directly.`
-                    : 'Hello! How can I assist you with bookings or practice information?';
+                    ? `I apologize, but I'm having trouble processing your request right now. Please try again. I can help you schedule, cancel, or reschedule appointments.`
+                    : 'Hi! I can help you schedule, cancel, or reschedule appointments. What would you like to do?';
             }
         } else {
             // Fallback if OpenAI not configured
@@ -321,24 +622,14 @@ DO NOT:
             });
             
             // Provide helpful responses even without OpenAI
-            if (isBookingQuery) {
-                reply = `I'd be happy to help you ${userText.toLowerCase().includes('schedule') || userText.toLowerCase().includes('book') ? 'schedule' : userText.toLowerCase().includes('cancel') ? 'cancel' : 'reschedule'} an appointment!
-
-To get started, I'll need a few details:
-- What date and time would work best for you?
-- What's your email address?
-
-Once you provide these, I can check availability and help you book your appointment.`;
-            } else if (isPracticeInfoQuery) {
-                if (contextBlurb && !contextBlurb.includes('No specific information')) {
-                    reply = `Based on our knowledge base:\n\n${contextBlurb}\n\nIs there anything specific you'd like to know more about?`;
-                } else {
-                    reply = `I don't have that specific information available in our knowledge base right now. Please contact us directly for more details, and we'll be happy to help you!`;
-                }
+            if (isScheduleQuery) {
+                reply = `I'd be happy to help you schedule an appointment! Let me check the calendar for available slots. What date or time range works best for you?`;
+            } else if (isCancelQuery) {
+                reply = `I can help you cancel your appointment. To find your appointment, I'll need your email address. What email address did you use when booking?`;
+            } else if (isRescheduleQuery) {
+                reply = `I can help you reschedule your appointment. First, I need to find your current appointment. What email address did you use when booking?`;
             } else {
-                reply = userText
-                    ? `${contextBlurb ? contextBlurb + '\n\n' : ''}Thanks for your message! I'm currently being set up, but I can help with basic questions. For booking appointments or detailed information, please contact us directly.`
-                    : (contextBlurb || 'Hello! How can I assist you today?');
+                reply = `I'm here to help you with appointments only. I can help you schedule, cancel, or reschedule an appointment. What would you like to do?`;
             }
         }
 

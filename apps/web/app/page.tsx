@@ -91,25 +91,22 @@ function AssistantWidget() {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showMenu, setShowMenu] = useState(true)
   const [messages, setMessages] = useState<Array<{ role: 'user'|'assistant'; content: string }>>([
-    { role: 'assistant', content: 'Hi! What do you need assistant with?' }
+    { role: 'assistant', content: 'Hi! I can help you schedule, cancel, or reschedule appointments. What would you like to do?' }
   ])
 
-  async function send(text?: string) {
-    const messageText = (text || input.trim())
+  async function send() {
+    const messageText = input.trim()
     if (!messageText) return
     setMessages((m) => [...m, { role: 'user', content: messageText }])
     setInput('')
-    setShowMenu(false)
     setLoading(true)
     try {
       const res = await fetch(`/api/chat/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          messages: [...messages, { role: 'user', content: messageText }],
-          menuSelection: text ? true : false
+          messages: [...messages, { role: 'user', content: messageText }]
         })
       })
       const data = await res.json().catch(() => ({}))
@@ -120,27 +117,6 @@ function AssistantWidget() {
     } finally {
       setLoading(false)
     }
-  }
-
-  function handleMenuClick(option: string) {
-    let menuText = '';
-    switch(option) {
-      case 'schedule':
-        menuText = 'I want to schedule an appointment';
-        break;
-      case 'cancel':
-        menuText = 'I want to cancel an appointment';
-        break;
-      case 'move':
-        menuText = 'I want to move or reschedule an appointment';
-        break;
-      case 'info':
-        menuText = 'Info about our practice';
-        break;
-      default:
-        menuText = option;
-    }
-    send(menuText)
   }
 
   return (
@@ -159,7 +135,7 @@ function AssistantWidget() {
           marginBottom: 12
         }}>
           <div style={{ padding: 12, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ fontWeight: 600 }}>Your Gut Assistant</div>
+            <div style={{ fontWeight: 600 }}>Appointment Assistant</div>
             <button onClick={() => setOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
           </div>
           <div style={{ flex: 1, padding: 12, overflowY: 'auto' }}>
@@ -171,69 +147,11 @@ function AssistantWidget() {
                   borderRadius: 10,
                   background: m.role === 'user' ? '#111' : '#f3f3f3',
                   color: m.role === 'user' ? 'white' : '#222',
-                  fontSize: 14
+                  fontSize: 14,
+                  whiteSpace: 'pre-wrap'
                 }}>{m.content}</div>
               </div>
             ))}
-            {showMenu && messages.length === 1 && (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ 
-                  padding: '12px 16px', 
-                  background: '#f8f9fa', 
-                  borderRadius: 8, 
-                  marginBottom: 8,
-                  cursor: 'pointer',
-                  border: '1px solid #e5e5e5',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#e9ecef'}
-                onMouseLeave={(e) => e.currentTarget.style.background = '#f8f9fa'}
-                onClick={() => handleMenuClick('schedule')}>
-                  📅 Schedule an appointment
-                </div>
-                <div style={{ 
-                  padding: '12px 16px', 
-                  background: '#f8f9fa', 
-                  borderRadius: 8, 
-                  marginBottom: 8,
-                  cursor: 'pointer',
-                  border: '1px solid #e5e5e5',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#e9ecef'}
-                onMouseLeave={(e) => e.currentTarget.style.background = '#f8f9fa'}
-                onClick={() => handleMenuClick('cancel')}>
-                  ❌ Cancel an appointment
-                </div>
-                <div style={{ 
-                  padding: '12px 16px', 
-                  background: '#f8f9fa', 
-                  borderRadius: 8, 
-                  marginBottom: 8,
-                  cursor: 'pointer',
-                  border: '1px solid #e5e5e5',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#e9ecef'}
-                onMouseLeave={(e) => e.currentTarget.style.background = '#f8f9fa'}
-                onClick={() => handleMenuClick('move')}>
-                  🔄 Move/reschedule an appointment
-                </div>
-                <div style={{ 
-                  padding: '12px 16px', 
-                  background: '#f8f9fa', 
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  border: '1px solid #e5e5e5',
-                  transition: 'all 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#e9ecef'}
-                onMouseLeave={(e) => e.currentTarget.style.background = '#f8f9fa'}
-                onClick={() => handleMenuClick('info')}>
-                  ℹ️ Info about our practice
-                </div>
-              </div>
-            )}
             {loading && <div style={{ color: '#666', fontSize: 13 }}>Thinking…</div>}
           </div>
           <div style={{ padding: 10, borderTop: '1px solid #eee' }}>
@@ -241,7 +159,7 @@ function AssistantWidget() {
               <input
                 value={input}
                 onChange={(e)=>setInput(e.target.value)}
-                placeholder="Ask about availability, rescheduling, or services…"
+                placeholder="Schedule, cancel, or reschedule an appointment…"
                 style={{ flex: 1, padding: 10, border: '1px solid #ddd', borderRadius: 8 }}
               />
               <button disabled={loading} style={{ padding: '10px 12px', background: '#111', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Send</button>
