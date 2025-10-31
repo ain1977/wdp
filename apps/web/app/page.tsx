@@ -1,8 +1,6 @@
 'use client'
 import { useState } from 'react'
-
-const bookingsUrl = process.env.NEXT_PUBLIC_BOOKINGS_URL
-const FUNCTIONS_BASE = 'https://func-xob7nugiarm7e.azurewebsites.net'
+ 
 
 export default function Home() {
   return (
@@ -12,64 +10,12 @@ export default function Home() {
         <img src="/chef-illustration.png" alt="lacura" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center' }} />
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(44,62,80,0.4)' }} />
         <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', color: 'white', padding: 20 }}>
-          <p style={{ fontSize: 24, fontWeight: 700, textShadow: '2px 2px 8px rgba(0,0,0,0.6)', marginBottom: 20 }}>Because caring for yourself starts at the table</p>
+          <p style={{ fontSize: 24, fontWeight: 700, textShadow: '2px 2px 8px rgba(0,0,0,0.6)', marginBottom: 20 }}>Healing begins in the gut. La Cura makes it delicious.</p>
           <a href="#contact" style={{ display: 'inline-block', padding: '14px 24px', borderRadius: 999, background: '#2c3e50', color: 'white', textDecoration: 'none', boxShadow: '0 8px 20px rgba(44,62,80,0.4)', textTransform: 'uppercase', letterSpacing: 1 }}>Get Started</a>
         </div>
         <div style={{ position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', color: 'white', fontSize: 28, opacity: 0.9 }}>↓</div>
       </section>
-
-      <main style={{ maxWidth: 960, margin: '0 auto', padding: 24 }}>
-
-      {/* Our Story */}
-      <section id="story" style={{ maxWidth: 760, margin: '0 auto 40px' }}>
-        <h2 style={{ fontSize: 28, marginBottom: 12 }}>Our Story</h2>
-        <p style={{ color: '#444', lineHeight: 1.7 }}>
-          At La Cura, we believe care begins at the table.
-        </p>
-        <p style={{ color: '#444', lineHeight: 1.7 }}>
-          Food isn't just fuel, it's medicine, comfort, and connection. It can calm inflammation, restore balance, and bring joy back to your body and mind.
-        </p>
-        <p style={{ color: '#444', lineHeight: 1.7 }}>
-          Each dish is grounded in the wisdom of Italian home cooking and the science of anti-inflammatory foods, herbs, and spices—nature's quiet healers.
-        </p>
-      </section>
-
-      {/* Journey */}
-      <section id="journey" style={{ marginBottom: 40 }}>
-        <h2 style={{ fontSize: 28, marginBottom: 16 }}>Your Journey to Wellness</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
-          {[
-            { n: '01', t: 'Discovery', d: 'We begin with a personal assessment to understand your goals, health needs, and taste preferences.' },
-            { n: '02', t: 'Sourcing with Care', d: 'We shop from local farms, organic markets, and our own garden of healing herbs.' },
-            { n: '03', t: 'Cooking in Your Kitchen', d: 'We prepare fresh, nourishing meals right in your home, crafted for three days of ease and balance.' },
-            { n: '04', t: 'Continuous Care', d: 'We listen, adjust, and evolve your menu as your needs and goals change.' }
-          ].map((s) => (
-            <div key={s.n} style={{ border: '1px solid #eee', borderRadius: 12, padding: 16, background: '#fafafa' }}>
-              <div style={{ fontSize: 14, color: '#999', marginBottom: 6 }}>{s.n}</div>
-              <h3 style={{ fontSize: 18, margin: '0 0 6px' }}>{s.t}</h3>
-              <p style={{ color: '#555', margin: 0 }}>{s.d}</p>
-            </div>
-          ))}
-        </div>
-        <div style={{ marginTop: 20 }}>
-          <a href="#contact" style={{ padding: '10px 16px', background: '#111', color: 'white', textDecoration: 'none', borderRadius: 8 }}>Feel Better Again</a>
-        </div>
-      </section>
-
-      {/* Contact */}
-      <section id="contact" style={{ marginTop: 40, marginBottom: 40 }}>
-        <h2 style={{ fontSize: 28, marginBottom: 12 }}>Get in Touch</h2>
-        <p style={{ color: '#555', marginBottom: 16 }}>Ready to start your journey to wellness? Send us a message and we'll get back to you soon.</p>
-        <form action="#" style={{ display: 'grid', gap: 12, maxWidth: 560 }} onSubmit={(e)=>e.preventDefault()}>
-          <input placeholder="Your name" style={{ padding: 12, borderRadius: 8, border: '1px solid #ddd' }} />
-          <input placeholder="Email" type="email" style={{ padding: 12, borderRadius: 8, border: '1px solid #ddd' }} />
-          <textarea placeholder="How can we help?" rows={4} style={{ padding: 12, borderRadius: 8, border: '1px solid #ddd' }} />
-          <button style={{ padding: '12px 16px', borderRadius: 8, background: '#111', color: 'white', border: 'none', cursor: 'pointer' }}>Send Message</button>
-        </form>
-      </section>
-
-        <AssistantWidget />
-      </main>
+      <AssistantWidget />
     </>
   )
 }
@@ -89,7 +35,7 @@ function AssistantWidget() {
     setInput('')
     setLoading(true)
     try {
-      const res = await fetch(`${FUNCTIONS_BASE}/api/chat/ask`, {
+      const res = await fetch(`/api/chat/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: [...messages, { role: 'user', content: text }] })
@@ -159,5 +105,6 @@ function AssistantWidget() {
     </div>
   )
 }
+ 
 
 
