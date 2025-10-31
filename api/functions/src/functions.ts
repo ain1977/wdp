@@ -368,13 +368,22 @@ Once you provide these, I can check availability and help you book your appointm
 
 // Send Email function
 export async function sendEmail(req: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> {
+    const requestId = context.invocationId;
+    const startTime = Date.now();
+    
     try {
+        context.log(`[${requestId}] sendEmail: Starting email send request`);
+        
         const connectionString = process.env.ACS_CONNECTION_STRING;
         if (!connectionString) {
+            context.error(`[${requestId}] sendEmail: ACS connection string not configured`);
             return { status: 500, jsonBody: { error: "ACS connection not configured" } };
         }
 
-        const body = (await req.json().catch(() => ({}))) as {
+        const body = (await req.json().catch((parseError) => {
+            context.error(`[${requestId}] sendEmail: Failed to parse request body`, parseError);
+            throw parseError;
+        })) as {
             to: string;
             subject?: string;
             html?: string;
@@ -386,17 +395,45 @@ export async function sendEmail(req: HttpRequest, context: InvocationContext): P
         const html = body.html ?? "<p>Hello from Azure Functions.</p>";
         const sender = body.from ?? process.env.ACS_SENDER;
 
+        context.log(`[${requestId}] sendEmail: Email details`, {
+            to,
+            sender,
+            hasSubject: !!subject,
+            hasHtml: !!html
+        });
+
         if (!to || !sender) {
+            context.warn(`[${requestId}] sendEmail: Missing required fields`, {
+                hasTo: !!to,
+                hasSender: !!sender
+            });
             return { status: 400, jsonBody: { error: "Missing 'to' or configured 'from' sender" } };
         }
 
+        context.log(`[${requestId}] sendEmail: Creating EmailClient`);
         const emailClient = new EmailClient(connectionString);
+        
+        context.log(`[${requestId}] sendEmail: Sending email`, {
+            senderAddress: sender,
+            to: to,
+            subject: subject
+        });
+        
         const poller = await emailClient.beginSend({
             senderAddress: sender,
             content: { subject, html },
             recipients: { to: [{ address: to }] }
         });
+        
+        context.log(`[${requestId}] sendEmail: Waiting for email send to complete`);
         const result = await poller.pollUntilDone();
+
+        const duration = Date.now() - startTime;
+        context.log(`[${requestId}] sendEmail: Email sent successfully`, {
+            messageId: result?.id,
+            status: result?.status,
+            durationMs: duration
+        });
 
         return {
             status: 200,
@@ -405,11 +442,26 @@ export async function sendEmail(req: HttpRequest, context: InvocationContext): P
                 status: result?.status ?? 'Unknown'
             }
         };
-    } catch (error) {
-        context.error("SendEmail error", error);
+    } catch (error: any) {
+        const duration = Date.now() - startTime;
+        const errorDetails = {
+            requestId,
+            errorMessage: error?.message || 'Unknown error',
+            errorCode: error?.code || error?.statusCode || 'UNKNOWN',
+            errorStack: error?.stack || 'No stack trace',
+            durationMs: duration
+        };
+        
+        context.error(`[${requestId}] sendEmail: Error sending email`, errorDetails);
+        context.error(`[${requestId}] sendEmail: Full error object`, error);
+        
         return {
             status: 500,
-            jsonBody: { error: "Internal error" }
+            jsonBody: { 
+                error: "Internal error",
+                requestId,
+                details: process.env.NODE_ENV === 'development' ? error?.message : undefined
+            }
         };
     }
 }
