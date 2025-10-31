@@ -283,6 +283,14 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'OPENAI_DEPLOYMENT_NAME'
           value: 'gpt-4o-mini'
         }
+        {
+          name: 'ACS_CONNECTION_STRING'
+          value: acs.listKeys().primaryConnectionString
+        }
+        {
+          name: 'ACS_SENDER'
+          value: 'DoNotReply@${acs.name}.azurecomm.net'
+        }
       ]
     }
   }
