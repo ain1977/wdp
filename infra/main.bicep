@@ -1,5 +1,5 @@
 @description('Azure region')
-param location string = 'eastus'
+param location string = resourceGroup().location
 
 @description('Static Web App name')
 param swaName string = 'swa-${uniqueString(resourceGroup().id)}'
@@ -100,20 +100,29 @@ resource openAi 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
   }
 }
 
-// GPT-4 Deployment (using GPT-4o - East US region supports this model)
-resource gpt4Deployment 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = {
-  parent: openAi
-  name: 'gpt-4'
-  properties: {
-    model: {
-      format: 'OpenAI'
-      name: 'gpt-4o'
-      version: '2024-11-20'
-    }
-    raiPolicyName: 'Microsoft.Default'
-    versionUpgradeOption: 'OnceNewDefaultVersionAvailable'
-  }
-}
+// GPT-4 Deployment
+// NOTE: Deploy manually via Azure AI Studio/AI Foundry if Bicep deployment fails due to SKU/region restrictions
+// Then this resource will reference the existing deployment or can be commented out
+// To deploy manually:
+// 1. Go to Azure Portal → Your OpenAI resource → Deployments
+// 2. Click "Create" and select a model (e.g., gpt-35-turbo, gpt-4o, etc.)
+// 3. Name it 'gpt-4' to match OPENAI_DEPLOYMENT_NAME setting
+// 4. Choose appropriate SKU/capacity based on what's available in West Europe
+// 
+// Uncomment below if you want Bicep to manage the deployment:
+// resource gpt4Deployment 'Microsoft.CognitiveServices/accounts/deployments@2023-05-01' = {
+//   parent: openAi
+//   name: 'gpt-4'
+//   properties: {
+//     model: {
+//       format: 'OpenAI'
+//       name: 'gpt-35-turbo'  // Use gpt-35-turbo as fallback - more widely supported
+//       version: '1106'
+//     }
+//     raiPolicyName: 'Microsoft.Default'
+//     versionUpgradeOption: 'OnceNewDefaultVersionAvailable'
+//   }
+// }
 
 // Azure Communication Services
 resource acs 'Microsoft.Communication/communicationServices@2023-04-01' = {
