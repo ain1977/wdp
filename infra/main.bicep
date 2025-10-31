@@ -19,6 +19,9 @@ param openAiName string = 'oai-${uniqueString(resourceGroup().id)}'
 @description('Azure Communication Services name')
 param acsName string = 'acs-${uniqueString(resourceGroup().id)}'
 
+@description('Azure AI Search service name')
+param aiSearchName string = 'search-${uniqueString(resourceGroup().id)}'
+
 // Static Web App (Free SKU by default)
 resource swa 'Microsoft.Web/staticSites@2022-09-01' = {
   name: swaName
@@ -84,6 +87,24 @@ resource acs 'Microsoft.Communication/communicationServices@2023-04-01' = {
   location: 'Global'
   properties: {
     dataLocation: 'United States'
+  }
+}
+
+// Azure AI Search (Cognitive Search)
+resource aiSearch 'Microsoft.Search/searchServices@2020-08-01' = {
+  name: aiSearchName
+  location: location
+  sku: {
+    name: 'basic'
+  }
+  properties: {
+    hostingMode: 'default'
+    networkRuleSet: {
+      ipRules: []
+    }
+    publicNetworkAccess: 'enabled'
+    replicaCount: 1
+    partitionCount: 1
   }
 }
 
@@ -175,6 +196,18 @@ resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
           name: 'WEBSITE_CONTENTSHARE'
           value: 'func-xob7nugiarm7e'
         }
+        {
+          name: 'AI_SEARCH_ENDPOINT'
+          value: 'https://${aiSearch.name}.search.windows.net'
+        }
+        {
+          name: 'AI_SEARCH_API_KEY'
+          value: listAdminKeys(aiSearch.id, '2020-08-01').primaryKey
+        }
+        {
+          name: 'AI_SEARCH_INDEX'
+          value: 'content'
+        }
       ]
     }
   }
@@ -194,5 +227,6 @@ output storageAccountName string = storageAccount.name
 output openAiEndpoint string = openAi.properties.endpoint
 output functionAppId string = functionApp.id
 output acsName string = acs.name
+output aiSearchEndpoint string = 'https://${aiSearch.name}.search.windows.net'
 
 
