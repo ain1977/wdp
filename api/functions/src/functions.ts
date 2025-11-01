@@ -279,7 +279,7 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
         const { messages } = body;
         const lastUser = [...(messages ?? [])].reverse().find(m => m.role === 'user');
         const userText = lastUser?.content?.slice(0, 1000) ?? '';
-        
+
         // Check conversation history to see if we're already in a workflow
         const conversationHistory = messages || [];
         const lastAssistantMessage = [...conversationHistory].reverse().find(m => m.role === 'assistant')?.content?.toLowerCase() || '';
@@ -657,44 +657,70 @@ RULES:
                 let availabilityContext = '';
                 
                 if ((workflowType === 'schedule' || workflowType === 'reschedule') && !isBookingConfirmation) {
-                    // Parse date from user text
-                    const dateInfo = parseDateFromText(userText);
-                    
-                    // Default: check next 7 days
-                    const startDate = new Date();
-                    startDate.setHours(0, 0, 0, 0);
-                    const endDate = new Date(startDate);
-                    endDate.setDate(endDate.getDate() + 7);
-                    endDate.setHours(23, 59, 59, 999);
-                    
-                    // If user specified a date, adjust range
-                    if (dateInfo.date) {
-                        startDate.setTime(dateInfo.date.getTime());
-                        endDate.setTime(dateInfo.date.getTime());
+                    try {
+                        // Parse date from user text
+                        const dateInfo = parseDateFromText(userText);
+                        
+                        // Default: check next 7 days
+                        const startDate = new Date();
+                        startDate.setHours(0, 0, 0, 0);
+                        const endDate = new Date(startDate);
+                        endDate.setDate(endDate.getDate() + 7);
                         endDate.setHours(23, 59, 59, 999);
+                        
+                        // If user specified a date, adjust range
+                        if (dateInfo.date) {
+                            startDate.setTime(dateInfo.date.getTime());
+                            endDate.setTime(dateInfo.date.getTime());
+                            endDate.setHours(23, 59, 59, 999);
+                        }
+                        
+                        context.log(`[${requestId}] chatAsk: Checking availability`, {
+                            startDate: startDate.toISOString(),
+                            endDate: endDate.toISOString(),
+                            userMentionedDate: dateInfo.hasDate,
+                            queryType: workflowType
+                        });
+                        
+                        // Add timeout protection for availability check
+                        const availabilityPromise = checkAvailabilityInternal(
+                            startDate.toISOString(),
+                            endDate.toISOString(),
+                            context
+                        );
+                        
+                        // Timeout after 10 seconds
+                        const timeoutPromise = new Promise<{ availableSlots: string[]; error?: string }>((resolve) => {
+                            setTimeout(() => {
+                                context.warn(`[${requestId}] chatAsk: Availability check timed out after 10s`);
+                                resolve({ availableSlots: [], error: 'Timeout' });
+                            }, 10000);
+                        });
+                        
+                        const availabilityResult = await Promise.race([availabilityPromise, timeoutPromise]);
+                        
+                        if (availabilityResult.error) {
+                            context.warn(`[${requestId}] chatAsk: Availability check failed`, {
+                                error: availabilityResult.error
+                            });
+                            availabilityContext = `\n\nAVAILABILITY CHECK RESULT: Unable to check calendar availability at the moment. Please ask the user for their preferred date and time, and we can proceed with scheduling.`;
+                        } else if (availabilityResult.availableSlots.length > 0) {
+                            availabilityContext = `\n\nAVAILABLE SLOTS (from calendar check):\n${formatAvailableSlots(availabilityResult.availableSlots)}\n\nUse this EXACT information to show the user available times. Present it in the format specified in the workflow.`;
+                        } else {
+                            availabilityContext = `\n\nAVAILABILITY CHECK RESULT: No available slots found in the requested time range. Suggest checking a different date or time range, or ask the user for their preferred dates.`;
+                        }
+                    } catch (availabilityError: any) {
+                        context.error(`[${requestId}] chatAsk: Error during availability check`, {
+                            errorMessage: availabilityError?.message,
+                            errorStack: availabilityError?.stack
+                        });
+                        availabilityContext = `\n\nAVAILABILITY CHECK RESULT: Unable to check calendar availability at the moment. Please ask the user for their preferred date and time, and we can proceed with scheduling.`;
                     }
                     
-                    context.log(`[${requestId}] chatAsk: Checking availability`, {
-                        startDate: startDate.toISOString(),
-                        endDate: endDate.toISOString(),
-                        userMentionedDate: dateInfo.hasDate,
-                        queryType: workflowType
-                    });
-                    
-                    const availabilityResult = await checkAvailabilityInternal(
-                        startDate.toISOString(),
-                        endDate.toISOString(),
-                        context
-                    );
-                    
-                    if (availabilityResult.availableSlots.length > 0) {
-                        availabilityContext = `\n\nAVAILABLE SLOTS (from calendar check):\n${formatAvailableSlots(availabilityResult.availableSlots)}\n\nUse this EXACT information to show the user available times. Present it in the format specified in the workflow.`;
-                    } else {
-                        availabilityContext = `\n\nAVAILABILITY CHECK RESULT: No available slots found in the requested time range. Suggest checking a different date or time range.`;
+                    // Add availability context to system prompt (even if check failed)
+                    if (availabilityContext) {
+                        openAIMessages[0].content += availabilityContext;
                     }
-                    
-                    // Add availability context to system prompt
-                    openAIMessages[0].content += availabilityContext;
                 }
                 
                 // For cancel queries, we may need to look up appointments
@@ -708,20 +734,42 @@ RULES:
                     }
                 }
                 
-                const response = await openAIClient.chat.completions.create({
+                // Add timeout protection for OpenAI call
+                const openAIPromise = openAIClient.chat.completions.create({
                     model: OPENAI_DEPLOYMENT_NAME,
                     messages: openAIMessages,
                     temperature: 0.7,
                     max_tokens: 600 // Increased for longer booking responses
                 });
                 
-                reply = response.choices[0]?.message?.content || 'I apologize, but I couldn\'t generate a response.';
+                // Timeout after 30 seconds
+                const openAITimeoutPromise = new Promise<{ choices: Array<{ message: { content: string } }> }>((resolve) => {
+                    setTimeout(() => {
+                        context.warn(`[${requestId}] chatAsk: OpenAI call timed out after 30s`);
+                        resolve({ 
+                            choices: [{ 
+                                message: { 
+                                    content: 'I apologize, but I\'m experiencing some delays. Let me help you schedule an appointment. What date and time would work best for you?' 
+                                } 
+                            }] 
+                        });
+                    }, 30000);
+                });
+                
+                const response = await Promise.race([openAIPromise, openAITimeoutPromise]);
+                
+                reply = response.choices[0]?.message?.content || 'I apologize, but I couldn\'t generate a response. Please try asking again.';
+                
+                // Ensure we always have a response
+                if (!reply || reply.trim().length === 0) {
+                    reply = 'I\'d be happy to help you schedule an appointment! What date and time would work best for you?';
+                }
                 
                 const duration = Date.now() - startTime;
                 context.log(`[${requestId}] chatAsk: Successfully generated response`, {
                     responseLength: reply.length,
                     durationMs: duration,
-                    tokensUsed: response.usage?.total_tokens
+                    tokensUsed: (response as any).usage?.total_tokens || 'unknown'
                 });
             } catch (openAIError: any) {
                 context.error(`[${requestId}] chatAsk: Azure OpenAI error`, {
