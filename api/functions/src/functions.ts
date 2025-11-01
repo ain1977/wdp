@@ -372,26 +372,42 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
             lowerText.trim().length < 10
         );
         
-        // If it's a general greeting or unclear query early in conversation, treat as appointment query
-        const shouldTreatAsBooking = isBookingQuery || (isEarlyConversation && !lowerText.includes('info') && !lowerText.includes('service') && !lowerText.includes('practice'));
+        // DANGEROUS/UNRELATED queries - Explicitly reject these
+        const isDangerousOrUnrelated = lowerText.includes('info about') ||
+                                      lowerText.includes('tell me about') ||
+                                      lowerText.includes('what is') && (lowerText.includes('service') || lowerText.includes('practice')) ||
+                                      lowerText.includes('nutrition') ||
+                                      lowerText.includes('diet') ||
+                                      lowerText.includes('recipe') ||
+                                      lowerText.includes('ingredient') ||
+                                      lowerText.includes('menu') ||
+                                      lowerText.includes('price') ||
+                                      lowerText.includes('cost') ||
+                                      lowerText.includes('how much') ||
+                                      (lowerText.includes('practice') && !lowerText.includes('appointment')) ||
+                                      (lowerText.includes('service') && !lowerText.includes('appointment'));
+        
+        // FLEXIBLE APPROACH: Accept almost everything unless clearly dangerous/unrelated
+        // Trust the LLM to understand intent and route to correct workflow
+        const shouldTreatAsBooking = !isDangerousOrUnrelated && userText.trim().length > 0;
         
         // Detect if user is providing booking details (email, time, date, confirm)
         const isBookingConfirmation = userText.toLowerCase().includes('@') || // email
                                      userText.toLowerCase().match(/\d{1,2}:\d{2}/) || // time format
-                                     (userText.toLowerCase().includes('yes') && isBookingQuery) ||
+                                     userText.toLowerCase().includes('yes') ||
                                      userText.toLowerCase().includes('confirm') ||
                                      userText.toLowerCase().includes('that works') ||
-                                     userText.toLowerCase().includes('sounds good');
+                                     userText.toLowerCase().includes('sounds good') ||
+                                     userText.toLowerCase().includes('perfect');
 
         // Determine which workflow to use (before logging)
-        // If early conversation and unclear, default to scheduling
-        const workflowType = isScheduleQuery || (isEarlyConversation && !isCancelQuery && !isRescheduleQuery) 
-            ? 'schedule' 
-            : isCancelQuery 
+        // Use keyword hints for initial routing, but LLM will handle interpretation
+        // Default to schedule if unclear (most common use case)
+        const workflowType = isCancelQuery && !isScheduleQuery && !isRescheduleQuery
             ? 'cancel' 
-            : isRescheduleQuery 
-            ? 'reschedule' 
-            : 'schedule'; // default to schedule
+            : isRescheduleQuery && !isScheduleQuery && !isCancelQuery
+            ? 'reschedule'
+            : 'schedule'; // Default to schedule - LLM will adjust based on conversation context
         
         context.log(`[${requestId}] chatAsk: Processing user message`, {
             messageLength: userText.length,
@@ -405,11 +421,12 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
             isInSchedulingFlow,
             isInCancelFlow,
             isInRescheduleFlow,
+            isDangerousOrUnrelated,
             shouldTreatAsBooking: shouldTreatAsBooking,
             workflowType: workflowType
         });
         
-        // REJECT non-booking queries (but be lenient early in conversation)
+        // REJECT only dangerous/unrelated queries - be very flexible otherwise
         if (!shouldTreatAsBooking && userText.trim().length > 0) {
             const reply = `I'm here to help you with appointments only. I can help you:
 - Schedule a new appointment
@@ -425,17 +442,24 @@ What would you like to do?`;
             };
         }
 
-        // Build system prompt - ONLY handle booking operations
-        let systemPrompt = `You are an Appointment Assistant for La Cura. Your ONLY purpose is to help users with:
+        // Build system prompt - Flexible but focused on appointments
+        let systemPrompt = `You are an Appointment Assistant for La Cura. Your primary purpose is to help users with:
 1. Scheduling new appointments
 2. Canceling existing appointments
 3. Rescheduling/moving existing appointments
 
-You CANNOT answer questions about services, practice information, nutrition, or anything else. If asked anything else, politely redirect: "I'm here to help with appointments only. I can help you schedule, cancel, or reschedule an appointment. What would you like to do?"
+You are FLEXIBLE and UNDERSTANDING - interpret user intent even if they don't use exact keywords. For example:
+- "propose a time" = wants to see available slots
+- "when can we meet" = scheduling request
+- "I can't make it" = cancellation request
+- "change to later" = rescheduling request
+- Any greeting or unclear message = likely wants to schedule
 
-Tone: warm, supportive, professional, concise
+If the user asks about services, practice information, nutrition, recipes, prices, or anything NOT related to appointments, politely redirect: "I'm here to help with appointments only. I can help you schedule, cancel, or reschedule an appointment. What would you like to do?"
 
-IMPORTANT: If the user sends a greeting (hi, hello) or an unclear message early in the conversation, assume they want to schedule an appointment and guide them through the scheduling workflow.
+Tone: warm, supportive, professional, concise, understanding
+
+CRITICAL: Be flexible with user language. Don't require exact keywords. Understand intent from context and conversation flow.
 
 `;
         
@@ -444,7 +468,8 @@ IMPORTANT: If the user sends a greeting (hi, hello) or an unclear message early 
             systemPrompt += `\n\n📅 SCHEDULING WORKFLOW - Follow these steps EXACTLY:
 
 STEP 1 - INITIAL REQUEST:
-When user asks to schedule/book an appointment:
+When user asks to schedule/book an appointment OR any request that sounds like they want to meet/book/see you:
+- Interpret flexibly: "schedule", "book", "appointment", "meet", "see you", "propose time", "when available", "find a time", etc.
 - Respond: "I'd be happy to help you schedule an appointment! Let me check the calendar for available slots."
 - If user mentions a date/time preference (e.g., "tomorrow", "Monday", "next week"), acknowledge it
 - IMMEDIATELY check availability (availability data will be provided below)
