@@ -120,8 +120,35 @@ async function checkAvailabilityInternal(startDate: string, endDate: string, con
         const start = new Date(startDate);
         const end = new Date(endDate);
         
+        // Business hours: 9 AM to 6 PM (9:00 - 18:00)
+        const BUSINESS_START_HOUR = 9;
+        const BUSINESS_END_HOUR = 18;
+        
+        context.log(`[checkAvailabilityInternal] Generating slots`, {
+            startDate: start.toISOString(),
+            endDate: end.toISOString(),
+            busyTimesCount: busyTimes.length,
+            startHour: start.getUTCHours(),
+            endHour: end.getUTCHours()
+        });
+        
+        // Generate slots every 30 minutes, but only during business hours
         for (let time = new Date(start); time < end; time.setTime(time.getTime() + slotDuration)) {
             const slotEnd = new Date(time.getTime() + slotDuration);
+            const hour = time.getUTCHours();
+            const dayOfWeek = time.getUTCDay(); // 0 = Sunday, 6 = Saturday
+            
+            // Skip weekends
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
+                continue;
+            }
+            
+            // Skip if outside business hours (9 AM - 6 PM UTC)
+            if (hour < BUSINESS_START_HOUR || hour >= BUSINESS_END_HOUR) {
+                continue;
+            }
+            
+            // Check if slot overlaps with any busy time
             const isBusy = busyTimes.some((busy: any) => {
                 const busyStart = new Date(busy.start.dateTime);
                 const busyEnd = new Date(busy.end.dateTime);
@@ -132,6 +159,12 @@ async function checkAvailabilityInternal(startDate: string, endDate: string, con
                 availableSlots.push(time.toISOString());
             }
         }
+        
+        context.log(`[checkAvailabilityInternal] Generated ${availableSlots.length} available slots`, {
+            totalSlots: availableSlots.length,
+            firstSlot: availableSlots[0] || 'none',
+            lastSlot: availableSlots[availableSlots.length - 1] || 'none'
+        });
         
         return { availableSlots };
     } catch (error: any) {
