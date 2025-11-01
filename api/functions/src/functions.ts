@@ -279,7 +279,17 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
         const { messages } = body;
         const lastUser = [...(messages ?? [])].reverse().find(m => m.role === 'user');
         const userText = lastUser?.content?.slice(0, 1000) ?? '';
-
+        
+        // Check conversation history to see if we're already in a workflow
+        const conversationHistory = messages || [];
+        const lastAssistantMessage = [...conversationHistory].reverse().find(m => m.role === 'assistant')?.content?.toLowerCase() || '';
+        const isInSchedulingFlow = lastAssistantMessage.includes('schedule') || 
+                                   lastAssistantMessage.includes('available') || 
+                                   lastAssistantMessage.includes('slots') ||
+                                   lastAssistantMessage.includes('date or time');
+        const isInCancelFlow = lastAssistantMessage.includes('cancel') && lastAssistantMessage.includes('email');
+        const isInRescheduleFlow = lastAssistantMessage.includes('reschedule') && lastAssistantMessage.includes('email');
+        
         // Detect booking-related queries (scheduling, canceling, rescheduling)
         // Be more lenient - check for appointment-related keywords or if this is early in conversation
         const lowerText = userText.toLowerCase();
@@ -297,13 +307,44 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
                                lowerText.includes('get a time') ||
                                lowerText.includes('available time') ||
                                lowerText.includes('when are you available') ||
+                               // Continuation phrases for scheduling workflow
+                               (isInSchedulingFlow && (
+                                   lowerText.includes('propose') ||
+                                   lowerText.includes('suggest') ||
+                                   lowerText.includes('show me') ||
+                                   lowerText.includes('what times') ||
+                                   lowerText.includes('what slots') ||
+                                   lowerText.includes('any time') ||
+                                   lowerText.includes('any slot') ||
+                                   lowerText.includes('prefer') ||
+                                   lowerText.includes('date') ||
+                                   lowerText.includes('time') ||
+                                   lowerText.match(/\d+\s*(am|pm)/i) ||
+                                   lowerText.includes('tomorrow') ||
+                                   lowerText.includes('monday') ||
+                                   lowerText.includes('tuesday') ||
+                                   lowerText.includes('wednesday') ||
+                                   lowerText.includes('thursday') ||
+                                   lowerText.includes('friday') ||
+                                   lowerText.includes('saturday') ||
+                                   lowerText.includes('sunday')
+                               )) ||
                                (isEarlyConversation && (lowerText.includes('hi') || lowerText.includes('hello') || lowerText.includes('help')));
         
         const isCancelQuery = lowerText.includes('cancel') ||
                              lowerText.includes('remove') ||
                              lowerText.includes('delete') ||
                              lowerText.includes('can\'t make it') ||
-                             lowerText.includes('cannot make it');
+                             lowerText.includes('cannot make it') ||
+                             // Continuation phrases for cancel workflow
+                             (isInCancelFlow && (
+                                 lowerText.includes('@') || // email
+                                 lowerText.match(/\d+/) || // selecting appointment number
+                                 lowerText.includes('first') ||
+                                 lowerText.includes('second') ||
+                                 lowerText.includes('yes') ||
+                                 lowerText.includes('confirm')
+                             ));
         
         const isRescheduleQuery = lowerText.includes('reschedule') ||
                                  lowerText.includes('move') ||
@@ -311,7 +352,15 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
                                  lowerText.includes('different time') ||
                                  lowerText.includes('different date') ||
                                  lowerText.includes('another time') ||
-                                 lowerText.includes('another date');
+                                 lowerText.includes('another date') ||
+                                 // Continuation phrases for reschedule workflow
+                                 (isInRescheduleFlow && (
+                                     lowerText.includes('@') || // email
+                                     lowerText.match(/\d+/) || // selecting appointment number
+                                     lowerText.includes('prefer') ||
+                                     lowerText.includes('date') ||
+                                     lowerText.includes('time')
+                                 ));
         
         const isBookingQuery = isScheduleQuery || isCancelQuery || isRescheduleQuery;
         
@@ -334,15 +383,30 @@ export async function chatAsk(req: HttpRequest, context: InvocationContext): Pro
                                      userText.toLowerCase().includes('that works') ||
                                      userText.toLowerCase().includes('sounds good');
 
+        // Determine which workflow to use (before logging)
+        // If early conversation and unclear, default to scheduling
+        const workflowType = isScheduleQuery || (isEarlyConversation && !isCancelQuery && !isRescheduleQuery) 
+            ? 'schedule' 
+            : isCancelQuery 
+            ? 'cancel' 
+            : isRescheduleQuery 
+            ? 'reschedule' 
+            : 'schedule'; // default to schedule
+        
         context.log(`[${requestId}] chatAsk: Processing user message`, {
             messageLength: userText.length,
             messageCount: messages?.length || 0,
+            userText: userText.substring(0, 100), // Log first 100 chars for debugging
             isScheduleQuery,
             isCancelQuery,
             isRescheduleQuery,
             isBookingQuery,
             isEarlyConversation,
-            shouldTreatAsBooking: shouldTreatAsBooking
+            isInSchedulingFlow,
+            isInCancelFlow,
+            isInRescheduleFlow,
+            shouldTreatAsBooking: shouldTreatAsBooking,
+            workflowType: workflowType
         });
         
         // REJECT non-booking queries (but be lenient early in conversation)
@@ -374,16 +438,6 @@ Tone: warm, supportive, professional, concise
 IMPORTANT: If the user sends a greeting (hi, hello) or an unclear message early in the conversation, assume they want to schedule an appointment and guide them through the scheduling workflow.
 
 `;
-        
-        // Determine which workflow to use
-        // If early conversation and unclear, default to scheduling
-        const workflowType = isScheduleQuery || (isEarlyConversation && !isCancelQuery && !isRescheduleQuery) 
-            ? 'schedule' 
-            : isCancelQuery 
-            ? 'cancel' 
-            : isRescheduleQuery 
-            ? 'reschedule' 
-            : 'schedule'; // default to schedule
         
         if (workflowType === 'schedule') {
             // DETAILED SCHEDULING WORKFLOW
